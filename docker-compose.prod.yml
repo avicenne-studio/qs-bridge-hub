@@ -1,0 +1,23 @@
+services:
+  oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      # Set up env variables on your server
+      # NODE_ENV: production
+      # FASTIFY_CLOSE_GRACE_DELAY: 1000
+      # LOG_LEVEL: info
+      # RATE_LIMIT_MAX: 4
+      # SQLITE_DB_FILE: /data/oracle.sqlite3
+      # HOST: 0.0.0.0
+      # PORT: 3000
+    volumes:
+      - oracle-sqlite:/data
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  oracle-sqlite:

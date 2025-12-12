@@ -1,0 +1,17 @@
+services:
+  oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env.local
+    environment:
+      SQLITE_DB_FILE: /data/oracle.sqlite3
+    volumes:
+      - oracle-sqlite:/data
+    ports:
+      - "${PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  oracle-sqlite:
