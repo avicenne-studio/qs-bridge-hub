@@ -1,5 +1,5 @@
 services:
-  oracle:
+  hub:
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,14 +10,14 @@ services:
       # FASTIFY_CLOSE_GRACE_DELAY: 1000
       # LOG_LEVEL: info
       # RATE_LIMIT_MAX: 4
-      # SQLITE_DB_FILE: /data/oracle.sqlite3
+      # SQLITE_DB_FILE: /data/hub.sqlite3
       # HOST: 0.0.0.0
       # PORT: 3000
     volumes:
-      - oracle-sqlite:/data
+      - hub-sqlite:/data
     ports:
       - "3000:3000"
     restart: unless-stopped
 
 volumes:
-  oracle-sqlite:
+  hub-sqlite:

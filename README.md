@@ -1,10 +1,10 @@
-# Qubic Solana Bridge Oracle
+# Qubic Solana Bridge Hub
 
-This repository hosts the Oracle responsible for validating Solana <-> Qubic bridge transactions.
+This repository hosts the Hub responsible for validating Solana <-> Qubic bridge transactions.
 
 ## Prerequisites
 
-Using **Docker** is the default way to run the Oracle.
+Using **Docker** is the default way to run the Hub.
 
 If you prefer running it directly on your machine (optional), you need:
 
@@ -20,15 +20,15 @@ cp .env.example .env
 
 Set `SQLITE_DB_FILE` to the database path.
 
-* **Docker (default):** `/data/oracle.sqlite3` (stored in a persistent Docker volume)
-* **Local Node.js (optional):** `./data/oracle.sqlite3` inside the repository
+* **Docker (default):** `/data/hub.sqlite3` (stored in a persistent Docker volume)
+* **Local Node.js (optional):** `./data/hub.sqlite3` inside the repository
 
-The Oracle creates the SQLite database automatically on first launch.
+The Hub creates the SQLite database automatically on first launch.
 
 
 ## Development
 
-### Run the Oracle in development mode
+### Run the Hub in development mode
 
 Run:
 ```bash
@@ -41,7 +41,7 @@ Access the API at:
 http://localhost:3000
 ```
 
-The SQLite database is stored in the `oracle-sqlite` Docker volume at `/data/oracle.sqlite3`.
+The SQLite database is stored in the `hub-sqlite` Docker volume at `/data/hub.sqlite3`.
 Any changes to local `.ts` files reload automatically inside the container.
 
 ## Production
