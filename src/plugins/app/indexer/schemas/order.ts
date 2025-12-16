@@ -1,15 +1,16 @@
 import { Static, Type } from "@sinclair/typebox";
-import {
-  QubicTransaction,
-} from "./qubic-transaction.js";
-import {
-  SolanaTransaction,
-} from "./solana-transaction.js";
+import { QubicTransaction } from "./qubic-transaction.js";
+import { SolanaTransaction } from "./solana-transaction.js";
 import { StringSchema } from "../../common/schemas/common.js";
 
 export const OracleChain = Type.Union([
   Type.Literal("qubic"),
   Type.Literal("solana"),
+]);
+
+export const OracleOrderStatus = Type.Union([
+  Type.Literal("in-progress"),
+  Type.Literal("finalized"),
 ]);
 
 export const OracleOrderSchema = Type.Object({
@@ -18,9 +19,11 @@ export const OracleOrderSchema = Type.Object({
   from: StringSchema,
   to: StringSchema,
   amount: Type.Number(),
+  status: OracleOrderStatus,
 });
 
 export type OracleOrder = Static<typeof OracleOrderSchema>;
+export type OracleOrderStatusType = Static<typeof OracleOrderStatus>;
 
 export function assertValidOracleOrder(order: OracleOrder) {
   if (order.source === order.dest) {
@@ -38,6 +41,7 @@ export function orderFromQubic(
     from: tx.sender,
     to: tx.recipient,
     amount: tx.amount,
+    status: "in-progress",
   };
   assertValidOracleOrder(order);
   return order;
@@ -55,6 +59,7 @@ export function orderFromSolana(
     from: decoded.from,
     to: decoded.to,
     amount: decoded.amount,
+    status: "in-progress",
   };
   assertValidOracleOrder(order);
   return order;
