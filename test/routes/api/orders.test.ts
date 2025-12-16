@@ -9,6 +9,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "A",
     to: "B",
     amount: 10,
+    status: "in-progress",
   });
   await app.ordersRepository.create({
     source: "qubic",
@@ -16,6 +17,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "C",
     to: "D",
     amount: 25,
+    status: "finalized",
   });
 }
 
@@ -39,6 +41,7 @@ test("GET /api/orders returns paginated list", async (t) => {
   assert.strictEqual(body.data.length, 1);
   assert.strictEqual(body.data[0].from, "A");
   assert.strictEqual(body.data[0].dest, "qubic");
+  assert.strictEqual(body.data[0].status, "in-progress");
 });
 
 test("GET /api/orders handles repository errors", async (t) => {
