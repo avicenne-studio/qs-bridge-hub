@@ -6,8 +6,9 @@
 - Emphasis on security: strict schema validation via `@fastify/type-provider-typebox`, custom error/404 handlers, Helmet/CORS, rate limiting, and sqlite-backed persistence for auditing oracle consensus.
 
 ## Architecture
-- **Plugin-driven Fastify app (`src/app.ts`)** – infra plugins (`src/plugins/infra`) run first to install cross-cutting concerns (env validation, helmet, cors, rate limits, sensible defaults, the Knex/SQLite connection, and the polling helper). Application plugins (`src/plugins/app`) then register domain capabilities (shared schemas plus the indexer domain).
-- **Generic polling helper (`src/plugins/infra/poller.ts`)** – decorates Fastify with `fastify.poller`, a minimal poller factory that accepts a dependency-injected `fetcher(server, signal)` and an `onRound` callback.
+- **Plugin-driven Fastify app (`src/app.ts`)** – infra plugins (`src/plugins/infra`) run first to install cross-cutting concerns (env validation, helmet, cors, rate limits, sensible defaults, connectivity helpers like SQLite/Knex, the polling helper, and the Undici HTTP client). Application plugins (`src/plugins/app`) then register domain capabilities (shared schemas plus the indexer domain).
+- **Generic polling helper (`src/plugins/infra/poller.ts`)** – decorates Fastify with `fastify.poller`, a minimal poller factory that accepts a dependency-injected `fetchOne(server, signal)` and an `onRound` callback. Each round awaits an optional jitter, runs requests concurrently via `Promise.allSettled` (so a single failure does not reject the entire round like `Promise.all` would), enforces per-request `AbortController` timeouts, and forwards only fulfilled typed responses along with round metadata. Recommended defaults live in `fastify.poller.defaults` (`intervalMs=1000`, `requestTimeoutMs=700`, `jitterMs=25`), and the file documents a concise usage example.
+- **Undici JSON client (`src/plugins/infra/undici-get-client.ts`)** – provides `fastify.undiciGetClient` for building reusable GET-only clients backed by per-origin `undici` Pools. Supports configurable connection counts, pipelining, keep-alive/connect timeouts, optional default headers, AbortSignal propagation, JSON parsing, and auto-closes created clients on Fastify shutdown. Defaults are tuned for polling workloads (connections=1, pipelining=1, keepAliveTimeout=10s, keepAliveMaxTimeout=60s, connectTimeout=5s).
 - **Indexer domain (`src/plugins/app/indexer`)** – encapsulates oracle order logic.
   - `orders.repository.ts` decorates Fastify with CRUD/pagination helpers that talk to SQLite via Knex; table is auto-created on startup (see `src/plugins/infra/knex.ts`).
   - `oracle-orders-reconciliation.ts` exposes `fastify.oracleOrdersReconciliatior.reconcile()` that enforces identical payloads across oracle reports and picks a consensus status (majority vote, rejects ties).
@@ -24,6 +25,11 @@
 
 ## Testing & QA
 - All automated tests live under `test/`, mirroring the runtime folders:
+  - `test/app` exercises cross-cutting behavior (CORS, rate limiting, error/404 handlers).
+  - `test/plugins/indexer` validates repository CRUD, reconciliation logic, and domain schemas/utilities.
+  - `test/plugins/poller/poller.test.ts` verifies the poller plugin (success filtering, AbortController timeouts, jitter handling, default settings, and double-start protection).
+  - `test/plugins/infra/undici-get-client.test.ts` covers the Undici GET client plugin (header merging, JSON parsing, HTTP error propagation, defaults exposure, and onClose cleanup).
+  - `test/routes/api` hosts HTTP-level tests; `orders.test.ts` seeds the test DB via the repository and asserts pagination + error logging flows.
 - `test/helper.ts` exposes `build()` which spins up a Fastify instance with the full plugin stack (using `node:test` contexts for lifecycle management). `npm run test` invokes `tsx --test` through `c8` for coverage.
 - **Coverage mandate:** keep the suite at 100% statement/branch/function coverage. When adding a feature, budget time to extend or add tests before merging; coverage gates should fail the CI if the threshold drops.
 

@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { AddressInfo } from "node:net";
 import { build } from "../../helper.js";
 
 const noop = () => {};
@@ -20,7 +22,7 @@ describe("poller plugin", () => {
       done = resolve;
     });
 
-    const fetcher = async (server: string) => {
+    const fetchOne = async (server: string) => {
       if (server === "fail") throw new Error("boom");
 
       const bucket = responsesByServer.get(server)!;
@@ -30,7 +32,7 @@ describe("poller plugin", () => {
 
     const poller = app.poller.create({
       servers,
-      fetcher: (s: string) => fetcher(s),
+      fetchOne: (s: string) => fetchOne(s),
       onRound: (responses, context) => {
         pollResults.push(responses);
 
@@ -41,7 +43,7 @@ describe("poller plugin", () => {
           });
         }
       },
-      intervalMs: 5,
+      intervalMs: 50,
       requestTimeoutMs: 10,
       jitterMs: 15,
     });
@@ -62,7 +64,7 @@ describe("poller plugin", () => {
     const abortedServers: string[] = [];
     const servers = ["slow", "fast"];
 
-    const fetcher = (server: string, signal: AbortSignal) =>
+    const fetchOne = (server: string, signal: AbortSignal) =>
       new Promise<string>((resolve, reject) => {
         if (server === "fast") {
           resolve("fast-response");
@@ -85,7 +87,7 @@ describe("poller plugin", () => {
 
     const poller = app.poller.create({
       servers,
-      fetcher,
+      fetchOne,
       onRound: (responses) => {
         assert.deepStrictEqual(responses, ["fast-response"]);
         queueMicrotask(() => {
@@ -115,7 +117,7 @@ describe("poller plugin", () => {
 
     const poller = app.poller.create({
       servers: ["s1"],
-      fetcher: async () => "ok",
+      fetchOne: async () => "ok",
       onRound: noop,
       intervalMs: 1,
       requestTimeoutMs: 10,
@@ -125,5 +127,85 @@ describe("poller plugin", () => {
     poller.start();
     assert.throws(() => poller.start(), /already started/);
     await poller.stop();
+  });
+
+  it("integrates with the Undici GET client transport across multiple servers", async (t) => {
+    const app = await build(t);
+
+    const fastState = { count: 0 };
+    const fastServer = createServer((req, res) => {
+      fastState.count += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({ server: "fast", round: fastState.count })
+      );
+    });
+
+    const failingServer = createServer((req, res) => {
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "boom" }));
+    });
+
+    let slowAborted = false;
+    const slowServer = createServer((req) => {
+      req.on("close", () => {
+        slowAborted = true;
+      });
+    });
+
+    const listen = async (srv: ReturnType<typeof createServer>) =>
+      new Promise<AddressInfo>((resolve) => {
+        srv.listen(0, () => resolve(srv.address() as AddressInfo));
+      });
+
+    const [fastAddr, failingAddr, slowAddr] = await Promise.all([
+      listen(fastServer),
+      listen(failingServer),
+      listen(slowServer),
+    ]);
+    t.after(() => fastServer.close());
+    t.after(() => failingServer.close());
+    t.after(() => slowServer.close());
+
+    type Response = { server: string; round: number };
+
+    const client = app.undiciGetClient.create();
+    const observed: Response[][] = [];
+
+    let done: (() => void) | null = null;
+    const completion = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+
+    const poller = app.poller.create({
+      servers: [
+        `http://127.0.0.1:${fastAddr.port}`,
+        `http://127.0.0.1:${failingAddr.port}`,
+        `http://127.0.0.1:${slowAddr.port}`,
+      ],
+      fetchOne: (server, signal) =>
+        client.getJson<Response>(server, "/poll", signal),
+      onRound: (responses, context) => {
+        observed.push(responses);
+        if (context.round === 2) {
+          queueMicrotask(() => {
+            poller.stop().then(() => done?.(), noop);
+          });
+        }
+      },
+      intervalMs: 5,
+      requestTimeoutMs: 50,
+      jitterMs: 0,
+    });
+
+    poller.start();
+    await completion;
+
+    assert.deepStrictEqual(observed, [
+      [{ server: "fast", round: 1 }],
+      [{ server: "fast", round: 2 }],
+    ]);
+    assert.ok(slowAborted, "expected slow server request to be aborted");
+    await client.close();
   });
 });

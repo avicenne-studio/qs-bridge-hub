@@ -25,7 +25,7 @@ export type PollerRoundHandler<TResponse> = (
 
 export type CreatePollerConfig<TResponse> = PollerOptions & {
   servers: readonly string[];
-  fetcher: Fetcher<TResponse>;
+  fetchOne: Fetcher<TResponse>;
   onRound: PollerRoundHandler<TResponse>;
 };
 
@@ -73,7 +73,7 @@ async function withTimeout<T>(
 function createPoller<TResponse>(
   config: CreatePollerConfig<TResponse>
 ): PollerHandle {
-  const { servers, fetcher, onRound, intervalMs, requestTimeoutMs, jitterMs } =
+  const { servers, fetchOne, onRound, intervalMs, requestTimeoutMs, jitterMs } =
     config;
 
   let runningPromise: Promise<void> | null = null;
@@ -92,7 +92,7 @@ function createPoller<TResponse>(
 
       const settled = await Promise.allSettled(
         servers.map((server) =>
-          withTimeout(requestTimeoutMs, (signal) => fetcher(server, signal))
+          withTimeout(requestTimeoutMs, (signal) => fetchOne(server, signal))
         )
       );
 
