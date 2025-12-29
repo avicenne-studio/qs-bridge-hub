@@ -1,9 +1,8 @@
-import { it, describe } from "node:test";
-import assert from "node:assert";
+import { it, describe, TestContext } from "node:test";
 import { build } from "../../helper.js";
 
 describe("ordersRepository", () => {
-  it("should create and retrieve an order by id", async (t) => {
+  it("should create and retrieve an order by id", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
@@ -16,20 +15,20 @@ describe("ordersRepository", () => {
       status: "in-progress",
     });
 
-    assert.ok(created);
-    assert.strictEqual(created?.id, 1);
-    assert.strictEqual(created?.source, "solana");
-    assert.strictEqual(created?.dest, "qubic");
-    assert.strictEqual(created?.from, "Alice");
-    assert.strictEqual(created?.to, "Bob");
-    assert.strictEqual(created?.amount, 123);
-    assert.strictEqual(created?.status, "in-progress");
+    t.assert.ok(created);
+    t.assert.strictEqual(created?.id, 1);
+    t.assert.strictEqual(created?.source, "solana");
+    t.assert.strictEqual(created?.dest, "qubic");
+    t.assert.strictEqual(created?.from, "Alice");
+    t.assert.strictEqual(created?.to, "Bob");
+    t.assert.strictEqual(created?.amount, 123);
+    t.assert.strictEqual(created?.status, "in-progress");
 
     const fetched = await repo.findById(created!.id);
-    assert.deepStrictEqual(fetched, created);
+    t.assert.deepStrictEqual(fetched, created);
   });
 
-  it("should paginate orders", async (t) => {
+  it("should paginate orders", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
     const empty = await repo.paginate({
@@ -38,8 +37,8 @@ describe("ordersRepository", () => {
       order: "asc",
     });
 
-    assert.strictEqual(empty.orders.length, 0);
-    assert.strictEqual(empty.total, 0);
+    t.assert.strictEqual(empty.orders.length, 0);
+    t.assert.strictEqual(empty.total, 0);
 
     // Insert 3 orders
     await repo.create({
@@ -73,10 +72,10 @@ describe("ordersRepository", () => {
       order: "asc",
     });
 
-    assert.strictEqual(page1.orders.length, 2);
-    assert.strictEqual(page1.total, 3);
-    assert.strictEqual(page1.orders[0].id, 1);
-    assert.strictEqual(page1.orders[1].id, 2);
+    t.assert.strictEqual(page1.orders.length, 2);
+    t.assert.strictEqual(page1.total, 3);
+    t.assert.strictEqual(page1.orders[0].id, 1);
+    t.assert.strictEqual(page1.orders[1].id, 2);
 
     const page2 = await repo.paginate({
       page: 2,
@@ -84,11 +83,11 @@ describe("ordersRepository", () => {
       order: "asc",
     });
 
-    assert.strictEqual(page2.orders.length, 1);
-    assert.strictEqual(page2.orders[0].id, 3);
+    t.assert.strictEqual(page2.orders.length, 1);
+    t.assert.strictEqual(page2.orders[0].id, 3);
   });
 
-  it("should filter by source or dest", async (t) => {
+  it("should filter by source or dest", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
@@ -116,9 +115,9 @@ describe("ordersRepository", () => {
       source: "solana",
     });
 
-    assert.strictEqual(solToQubic.orders.length, 1);
-    assert.strictEqual(solToQubic.orders[0].source, "solana");
-    assert.strictEqual(solToQubic.orders[0].dest, "qubic");
+    t.assert.strictEqual(solToQubic.orders.length, 1);
+    t.assert.strictEqual(solToQubic.orders[0].source, "solana");
+    t.assert.strictEqual(solToQubic.orders[0].dest, "qubic");
 
     const qubicToSol = await repo.paginate({
       page: 1,
@@ -127,12 +126,12 @@ describe("ordersRepository", () => {
       dest: "solana",
     });
 
-    assert.strictEqual(qubicToSol.orders.length, 1);
-    assert.strictEqual(qubicToSol.orders[0].source, "qubic");
-    assert.strictEqual(qubicToSol.orders[0].dest, "solana");
+    t.assert.strictEqual(qubicToSol.orders.length, 1);
+    t.assert.strictEqual(qubicToSol.orders[0].source, "qubic");
+    t.assert.strictEqual(qubicToSol.orders[0].dest, "solana");
   });
 
-  it("should update an order", async (t) => {
+  it("should update an order", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
@@ -150,24 +149,27 @@ describe("ordersRepository", () => {
       status: "finalized",
     });
 
-    assert.ok(updated);
-    assert.strictEqual(updated?.amount, 42);
-    assert.strictEqual(updated?.status, "finalized");
+    t.assert.ok(updated);
+    t.assert.strictEqual(updated?.amount, 42);
+    t.assert.strictEqual(updated?.status, "finalized");
 
     const fetched = await repo.findById(created!.id);
-    assert.strictEqual(fetched?.amount, 42);
-    assert.strictEqual(fetched?.status, "finalized");
+    t.assert.strictEqual(fetched?.amount, 42);
+    t.assert.strictEqual(fetched?.status, "finalized");
   });
 
-  it("should return null when updating a non-existent order", async (t) => {
+  it(
+    "should return null when updating a non-existent order",
+    async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
     const updated = await repo.update(9999, { amount: 100 });
-    assert.strictEqual(updated, null);
-  });
+      t.assert.strictEqual(updated, null);
+    }
+  );
 
-  it("should delete an order", async (t) => {
+  it("should delete an order", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
@@ -181,17 +183,20 @@ describe("ordersRepository", () => {
     });
 
     const removed = await repo.delete(created!.id);
-    assert.strictEqual(removed, true);
+    t.assert.strictEqual(removed, true);
 
     const after = await repo.findById(created!.id);
-    assert.strictEqual(after, null);
+    t.assert.strictEqual(after, null);
   });
 
-  it("should return false when deleting a non-existent order", async (t) => {
+  it(
+    "should return false when deleting a non-existent order",
+    async (t: TestContext) => {
     const app = await build(t);
     const repo = app.ordersRepository;
 
     const removed = await repo.delete(9999);
-    assert.strictEqual(removed, false);
-  });
+      t.assert.strictEqual(removed, false);
+    }
+  );
 });

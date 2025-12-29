@@ -33,7 +33,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      return { paused: true };
+      return { paused: true } as const
     }
   );
 

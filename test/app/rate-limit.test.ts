@@ -1,23 +1,22 @@
-import { it } from 'node:test'
-import { build } from '../helper.js'
-import assert from 'node:assert'
+import { it, TestContext } from "node:test";
+import { build } from "../helper.js";
 
-it('should be rate limited', async (t) => {
-  const app = await build(t)
+it("should be rate limited", async (t: TestContext) => {
+  const app = await build(t);
 
   for (let i = 0; i < 4; i++) {
     const res = await app.inject({
-      method: 'GET',
-      url: '/'
-    })
+      method: "GET",
+      url: "/",
+    });
 
-    assert.strictEqual(res.statusCode, 200)
+    t.assert.strictEqual(res.statusCode, 200);
   }
 
   const res = await app.inject({
-    method: 'GET',
-    url: '/'
-  })
+    method: "GET",
+    url: "/",
+  });
 
-  assert.strictEqual(res.statusCode, 429)
-})
+  t.assert.strictEqual(res.statusCode, 429);
+});

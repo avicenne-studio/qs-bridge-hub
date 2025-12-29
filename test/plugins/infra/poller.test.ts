@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, TestContext } from "node:test";
 import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helper.js";
@@ -7,7 +6,7 @@ import { build } from "../../helper.js";
 const noop = () => {};
 
 describe("poller plugin", () => {
-  it("collects only successful responses per round", async (t) => {
+  it("collects only successful responses per round", async (t: TestContext) => {
     const app = await build(t);
 
     const servers = ["ok-1", "ok-2", "fail"] as const;
@@ -51,14 +50,14 @@ describe("poller plugin", () => {
     poller.start();
     await completion;
 
-    assert.deepStrictEqual(pollResults, [
+    t.assert.deepStrictEqual(pollResults, [
       ["ok-1-r1", "ok-2-r1"],
       ["ok-1-r2", "ok-2-r2"],
     ]);
-    assert.strictEqual(poller.isRunning(), false);
+    t.assert.strictEqual(poller.isRunning(), false);
   });
 
-  it("aborts slow servers and exposes defaults", async (t) => {
+  it("aborts slow servers and exposes defaults", async (t: TestContext) => {
     const app = await build(t);
 
     const abortedServers: string[] = [];
@@ -89,7 +88,7 @@ describe("poller plugin", () => {
       servers,
       fetchOne,
       onRound: (responses) => {
-        assert.deepStrictEqual(responses, ["fast-response"]);
+        t.assert.deepStrictEqual(responses, ["fast-response"]);
         queueMicrotask(() => {
           poller.stop().then(() => done?.(), noop);
         });
@@ -99,7 +98,7 @@ describe("poller plugin", () => {
       jitterMs: 0,
     });
 
-    assert.deepStrictEqual(app.poller.defaults, {
+    t.assert.deepStrictEqual(app.poller.defaults, {
       intervalMs: 1000,
       requestTimeoutMs: 700,
       jitterMs: 25,
@@ -108,11 +107,11 @@ describe("poller plugin", () => {
     poller.start();
     await completion;
 
-    assert.deepStrictEqual(abortedServers, ["slow"]);
+    t.assert.deepStrictEqual(abortedServers, ["slow"]);
     await poller.stop().catch(noop);
   });
 
-  it("throws when start is invoked twice", async (t) => {
+  it("throws when start is invoked twice", async (t: TestContext) => {
     const app = await build(t);
 
     const poller = app.poller.create({
@@ -125,11 +124,13 @@ describe("poller plugin", () => {
     });
 
     poller.start();
-    assert.throws(() => poller.start(), /already started/);
+    t.assert.throws(() => poller.start(), /already started/);
     await poller.stop();
   });
 
-  it("integrates with the Undici GET client transport across multiple servers", async (t) => {
+  it(
+    "integrates with the Undici GET client transport across multiple servers",
+    async (t: TestContext) => {
     const app = await build(t);
 
     const fastState = { count: 0 };
@@ -201,11 +202,12 @@ describe("poller plugin", () => {
     poller.start();
     await completion;
 
-    assert.deepStrictEqual(observed, [
-      [{ server: "fast", round: 1 }],
-      [{ server: "fast", round: 2 }],
-    ]);
-    assert.ok(slowAborted, "expected slow server request to be aborted");
-    await client.close();
-  });
+      t.assert.deepStrictEqual(observed, [
+        [{ server: "fast", round: 1 }],
+        [{ server: "fast", round: 2 }],
+      ]);
+      t.assert.ok(slowAborted, "expected slow server request to be aborted");
+      await client.close();
+    }
+  );
 });

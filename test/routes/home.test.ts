@@ -1,14 +1,13 @@
-import { test } from 'node:test'
-import assert from 'node:assert'
-import { build } from '../helper.js'
+import { test, TestContext } from "node:test";
+import { build } from "../helper.js";
 
-test('GET /', async (t) => {
-  const app = await build(t)
+test("GET /", async (t: TestContext) => {
+  const app = await build(t);
   const res = await app.inject({
-    url: '/'
-  })
+    url: "/",
+  });
 
-  assert.deepStrictEqual(JSON.parse(res.payload), {
-    message: 'Welcome to the Qubic-Solana bridge oracle!'
-  })
-})
+  t.assert.deepStrictEqual(JSON.parse(res.payload), {
+    message: "Welcome to the Qubic-Solana bridge oracle!",
+  });
+});

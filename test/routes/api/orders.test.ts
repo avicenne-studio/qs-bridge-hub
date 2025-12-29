@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert";
+import { test, TestContext } from "node:test";
 import { build } from "../../helper.js";
 
 async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
@@ -21,7 +20,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
   });
 }
 
-test("GET /api/orders returns paginated list", async (t) => {
+test("GET /api/orders returns paginated list", async (t: TestContext) => {
   const app = await build(t);
   await seedOrders(app);
 
@@ -30,21 +29,21 @@ test("GET /api/orders returns paginated list", async (t) => {
     method: "GET",
   });
 
-  assert.strictEqual(res.statusCode, 200);
+  t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
 
-  assert.deepStrictEqual(body.pagination, {
+  t.assert.deepStrictEqual(body.pagination, {
     page: 1,
     limit: 1,
     total: 1,
   });
-  assert.strictEqual(body.data.length, 1);
-  assert.strictEqual(body.data[0].from, "A");
-  assert.strictEqual(body.data[0].dest, "qubic");
-  assert.strictEqual(body.data[0].status, "in-progress");
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].from, "A");
+  t.assert.strictEqual(body.data[0].dest, "qubic");
+  t.assert.strictEqual(body.data[0].status, "in-progress");
 });
 
-test("GET /api/orders handles repository errors", async (t) => {
+test("GET /api/orders handles repository errors", async (t: TestContext) => {
   const app = await build(t);
   const { mock: repoMock } = t.mock.method(app.ordersRepository, "paginate");
   repoMock.mockImplementation(() => {
@@ -58,12 +57,12 @@ test("GET /api/orders handles repository errors", async (t) => {
     method: "GET",
   });
 
-  assert.strictEqual(res.statusCode, 500);
+  t.assert.strictEqual(res.statusCode, 500);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logPayload, logMsg] = logMock.calls[0].arguments as any;
-  assert.strictEqual(logMsg, "Failed to list orders");
-  assert.strictEqual(logPayload.err.message, "db down");
+  t.assert.strictEqual(logMsg, "Failed to list orders");
+  t.assert.strictEqual(logPayload.err.message, "db down");
 
   const body = JSON.parse(res.payload);
-  assert.strictEqual(body.message, "Internal Server Error");
+  t.assert.strictEqual(body.message, "Internal Server Error");
 });

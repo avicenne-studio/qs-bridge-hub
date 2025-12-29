@@ -1,8 +1,7 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { test, TestContext } from "node:test";
 import { build } from "../../helper.js";
 
-test("GET /api/health/bridge reports paused status", async (t) => {
+test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
   const app = await build(t);
 
   const res = await app.inject({
@@ -10,12 +9,12 @@ test("GET /api/health/bridge reports paused status", async (t) => {
     method: "GET",
   });
 
-  assert.strictEqual(res.statusCode, 200);
+  t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  assert.deepStrictEqual(body, { paused: true });
+  t.assert.deepStrictEqual(body, { paused: true });
 });
 
-test("GET /api/health/oracles lists oracle statuses", async (t) => {
+test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => {
   const app = await build(t);
 
   const res = await app.inject({
@@ -23,14 +22,14 @@ test("GET /api/health/oracles lists oracle statuses", async (t) => {
     method: "GET",
   });
 
-  assert.strictEqual(res.statusCode, 200);
+  t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  assert.ok(Array.isArray(body.oracles));
-  assert.ok(body.oracles.length > 0);
+  t.assert.ok(Array.isArray(body.oracles));
+  t.assert.ok(body.oracles.length > 0);
 
   for (const oracle of body.oracles) {
-    assert.ok(typeof oracle.url === "string");
-    assert.strictEqual(oracle.status, "ok");
-    assert.ok(!Number.isNaN(Date.parse(oracle.timestamp)));
+    t.assert.ok(typeof oracle.url === "string");
+    t.assert.strictEqual(oracle.status, "ok");
+    t.assert.ok(!Number.isNaN(Date.parse(oracle.timestamp)));
   }
 });

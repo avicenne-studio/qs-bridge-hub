@@ -31,6 +31,7 @@
   - `test/plugins/poller/poller.test.ts` verifies the poller plugin (success filtering, AbortController timeouts, jitter handling, default settings, and double-start protection).
   - `test/plugins/infra/undici-get-client.test.ts` covers the Undici GET client plugin (header merging, JSON parsing, HTTP error propagation, defaults exposure, and onClose cleanup).
   - `test/routes/api` hosts HTTP-level tests; `orders.test.ts` seeds the test DB via the repository and asserts pagination + error logging flows, while `health.test.ts` exercises the new health endpoints.
+- Tests use Node's `node:test` `TestContext` assertions (`t.assert.*`) rather than importing `assert` directly, keeping the helper utilities minimal.
 - `test/helper.ts` exposes `build()` which spins up a Fastify instance with the full plugin stack (using `node:test` contexts for lifecycle management). `npm run test` invokes `tsx --test` through `c8` for coverage.
 - **Coverage mandate:** keep the suite at 100% statement/branch/function coverage. When adding a feature, budget time to extend or add tests before merging; coverage gates should fail the CI if the threshold drops.
 

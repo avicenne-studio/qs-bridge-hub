@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert";
+import { describe, it, TestContext } from "node:test";
 
 import {
   OracleOrder,
@@ -31,7 +30,7 @@ const mockSolanaTx: SolanaTransaction = {
 };
 
 describe("OracleOrder utilities", () => {
-  it("should accept valid orders with different source and dest", () => {
+  it("should accept valid orders with different source and dest", (t: TestContext) => {
     const order: OracleOrder = {
       source: "solana",
       dest: "qubic",
@@ -41,10 +40,10 @@ describe("OracleOrder utilities", () => {
       status: "in-progress",
     };
 
-    assert.doesNotThrow(() => assertValidOracleOrder(order));
+    t.assert.doesNotThrow(() => assertValidOracleOrder(order));
   });
 
-  it("should reject orders where source === dest", () => {
+  it("should reject orders where source === dest", (t: TestContext) => {
     const order: OracleOrder = {
       source: "qubic",
       dest: "qubic",
@@ -54,39 +53,39 @@ describe("OracleOrder utilities", () => {
       status: "finalized",
     };
 
-    assert.throws(
+    t.assert.throws(
       () => assertValidOracleOrder(order),
       /source and dest must differ/
     );
   });
 
-  it("should construct an order from a Qubic transaction", () => {
+  it("should construct an order from a Qubic transaction", (t: TestContext) => {
     const order = orderFromQubic(mockQubicTx, "solana");
 
-    assert.strictEqual(order.source, "qubic");
-    assert.strictEqual(order.dest, "solana");
-    assert.strictEqual(order.from, mockQubicTx.sender);
-    assert.strictEqual(order.to, mockQubicTx.recipient);
-    assert.strictEqual(order.amount, mockQubicTx.amount);
-    assert.strictEqual(order.status, "in-progress");
+    t.assert.strictEqual(order.source, "qubic");
+    t.assert.strictEqual(order.dest, "solana");
+    t.assert.strictEqual(order.from, mockQubicTx.sender);
+    t.assert.strictEqual(order.to, mockQubicTx.recipient);
+    t.assert.strictEqual(order.amount, mockQubicTx.amount);
+    t.assert.strictEqual(order.status, "in-progress");
   });
 
-  it("should throw when Qubic order has identical source and dest", () => {
-    assert.throws(
+  it("should throw when Qubic order has identical source and dest", (t: TestContext) => {
+    t.assert.throws(
       () => orderFromQubic(mockQubicTx, "qubic"),
       /source and dest must differ/
     );
   });
 
-  it("should throw because normalizeBridgeInstruction is not implemented", () => {
-    assert.throws(
+  it("should throw because normalizeBridgeInstruction is not implemented", (t: TestContext) => {
+    t.assert.throws(
       () => orderFromSolana(mockSolanaTx, "qubic"),
       /not implemented/
     );
   });
 
-  it("normalizeBridgeInstruction should always throw", () => {
-    assert.throws(
+  it("normalizeBridgeInstruction should always throw", (t: TestContext) => {
+    t.assert.throws(
       () => normalizeBridgeInstruction("foo"),
       /not implemented/
     );
