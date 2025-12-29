@@ -105,6 +105,8 @@ Run the full test suite:
 npm run test
 ```
 
+> The codebase must maintain 100% statement/branch/function coverage—add or update tests alongside every change to keep the threshold intact.
+
 ## Linting
 
 Check lint rules:
