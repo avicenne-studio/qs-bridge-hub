@@ -15,6 +15,7 @@
   - Schemas under `schemas/` describe Qubic / Solana transactions and the normalized `OracleOrder`. `orderFromQubic` and `orderFromSolana` show how to normalize raw chain transactions before persisting; `normalizeBridgeInstruction` is the hook where Solana IX data should be decoded.
 - **Routes (`src/routes`)** – home route returns a welcome banner; `/api` namespace holds resource-specific routers.
   - `src/routes/api/orders/index.ts` provides `GET /api/orders` for paginated listing with optional `source/dest` filters. Responses include pagination metadata; all parameters/responses are validated through TypeBox schemas.
+  - `src/routes/api/health/index.ts` exposes lightweight health probes: `GET /api/health/bridge` currently reports `{paused:true}` for the bridge, and `GET /api/health/oracles` returns stubbed oracle statuses (`url`, hardcoded `status: "ok"`, ISO timestamp) using shared TypeBox schemas ready for future wiring to real monitors.
 - **Process lifecycle (`src/server.ts`)** – builds a Fastify instance with smart logging defaults, registers the app via `fastify-plugin` (so decorators leak to encapsulated scopes), and closes gracefully via `close-with-grace`.
 
 ## Database
@@ -29,7 +30,7 @@
   - `test/plugins/indexer` validates repository CRUD, reconciliation logic, and domain schemas/utilities.
   - `test/plugins/poller/poller.test.ts` verifies the poller plugin (success filtering, AbortController timeouts, jitter handling, default settings, and double-start protection).
   - `test/plugins/infra/undici-get-client.test.ts` covers the Undici GET client plugin (header merging, JSON parsing, HTTP error propagation, defaults exposure, and onClose cleanup).
-  - `test/routes/api` hosts HTTP-level tests; `orders.test.ts` seeds the test DB via the repository and asserts pagination + error logging flows.
+  - `test/routes/api` hosts HTTP-level tests; `orders.test.ts` seeds the test DB via the repository and asserts pagination + error logging flows, while `health.test.ts` exercises the new health endpoints.
 - `test/helper.ts` exposes `build()` which spins up a Fastify instance with the full plugin stack (using `node:test` contexts for lifecycle management). `npm run test` invokes `tsx --test` through `c8` for coverage.
 - **Coverage mandate:** keep the suite at 100% statement/branch/function coverage. When adding a feature, budget time to extend or add tests before merging; coverage gates should fail the CI if the threshold drops.
 
