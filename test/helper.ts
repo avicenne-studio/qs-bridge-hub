@@ -1,8 +1,7 @@
 import fastify, { LightMyRequestResponse } from "fastify";
 import { TestContext } from "node:test";
 import serviceApp from "../src/app.js";
-import assert from "node:assert";
-import fp from 'fastify-plugin'
+import fp from "fastify-plugin";
 
 // Fill in this config with all the configurations
 // needed for testing the application
@@ -13,12 +12,13 @@ export function config() {
 }
 
 export function expectValidationError(
+  t: TestContext,
   res: LightMyRequestResponse,
   expectedMessage: string
 ) {
-  assert.strictEqual(res.statusCode, 400);
+  t.assert.strictEqual(res.statusCode, 400);
   const { message } = JSON.parse(res.payload);
-  assert.strictEqual(message, expectedMessage);
+  t.assert.strictEqual(message, expectedMessage);
 }
 
 // automatically build and tear down our instance

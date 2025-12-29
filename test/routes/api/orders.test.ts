@@ -43,6 +43,24 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].status, "in-progress");
 });
 
+test("GET /api/orders/signatures returns fixtures", async (t: TestContext) => {
+  const app = await build(t);
+
+  const res = await app.inject({
+    url: "/api/orders/signatures",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.deepStrictEqual(body, {
+    data: [
+      { orderId: "order-1", dest: "solana", signatures: ["sigA", "sigB"] },
+      { orderId: "order-2", dest: "qubic", signatures: ["sigC"] },
+    ],
+  });
+});
+
 test("GET /api/orders handles repository errors", async (t: TestContext) => {
   const app = await build(t);
   const { mock: repoMock } = t.mock.method(app.ordersRepository, "paginate");

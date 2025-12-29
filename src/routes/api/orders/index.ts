@@ -34,6 +34,16 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
+const OrderSignaturesSchema = Type.Object({
+  orderId: Type.String(),
+  dest: OracleChain,
+  signatures: Type.Array(Type.String()),
+});
+
+const OrderSignaturesResponseSchema = Type.Object({
+  data: Type.Array(OrderSignaturesSchema),
+});
+
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
     "/",
@@ -69,6 +79,33 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         fastify.log.error({ err: error }, "Failed to list orders");
         throw fastify.httpErrors.internalServerError("Failed to list orders");
       }
+    }
+  );
+
+  fastify.get(
+    "/signatures",
+    {
+      schema: {
+        response: {
+          200: OrderSignaturesResponseSchema,
+        },
+      },
+    },
+    async function handler() {
+      return {
+        data: [
+          {
+            orderId: "order-1",
+            dest: "solana" as const,
+            signatures: ["sigA", "sigB"],
+          },
+          {
+            orderId: "order-2",
+            dest: "qubic" as const,
+            signatures: ["sigC"],
+          },
+        ],
+      };
     }
   );
 };
