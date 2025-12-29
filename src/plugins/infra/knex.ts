@@ -41,6 +41,7 @@ export default fp(
           table.string("from").notNullable();
           table.string("to").notNullable();
           table.float("amount").notNullable();
+          table.string("status").notNullable().defaultTo("in-progress");
         });
       }
     });

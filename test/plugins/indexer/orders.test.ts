@@ -38,6 +38,7 @@ describe("OracleOrder utilities", () => {
       from: "A",
       to: "B",
       amount: 10,
+      status: "in-progress",
     };
 
     assert.doesNotThrow(() => assertValidOracleOrder(order));
@@ -50,6 +51,7 @@ describe("OracleOrder utilities", () => {
       from: "A",
       to: "B",
       amount: 1,
+      status: "finalized",
     };
 
     assert.throws(
@@ -66,6 +68,7 @@ describe("OracleOrder utilities", () => {
     assert.strictEqual(order.from, mockQubicTx.sender);
     assert.strictEqual(order.to, mockQubicTx.recipient);
     assert.strictEqual(order.amount, mockQubicTx.amount);
+    assert.strictEqual(order.status, "in-progress");
   });
 
   it("should throw when Qubic order has identical source and dest", () => {

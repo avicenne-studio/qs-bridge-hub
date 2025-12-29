@@ -1,16 +1,11 @@
 import { it, describe } from "node:test";
 import assert from "node:assert";
 import { build } from "../../helper.js";
-import { ORDERS_TABLE_NAME } from "../../../src/plugins/app/indexer/orders.repository.js";
 
 describe("ordersRepository", () => {
   it("should create and retrieve an order by id", async (t) => {
     const app = await build(t);
     const repo = app.ordersRepository;
-
-    const hasTable = await app.knex.schema.hasTable(ORDERS_TABLE_NAME);
-
-    console.log("rhas table test", hasTable);
 
     const created = await repo.create({
       source: "solana",
@@ -18,6 +13,7 @@ describe("ordersRepository", () => {
       from: "Alice",
       to: "Bob",
       amount: 123,
+      status: "in-progress",
     });
 
     assert.ok(created);
@@ -27,6 +23,7 @@ describe("ordersRepository", () => {
     assert.strictEqual(created?.from, "Alice");
     assert.strictEqual(created?.to, "Bob");
     assert.strictEqual(created?.amount, 123);
+    assert.strictEqual(created?.status, "in-progress");
 
     const fetched = await repo.findById(created!.id);
     assert.deepStrictEqual(fetched, created);
@@ -51,6 +48,7 @@ describe("ordersRepository", () => {
       from: "A",
       to: "B",
       amount: 10,
+      status: "in-progress",
     });
     await repo.create({
       source: "solana",
@@ -58,6 +56,7 @@ describe("ordersRepository", () => {
       from: "C",
       to: "D",
       amount: 20,
+      status: "finalized",
     });
     await repo.create({
       source: "qubic",
@@ -65,6 +64,7 @@ describe("ordersRepository", () => {
       from: "E",
       to: "F",
       amount: 30,
+      status: "in-progress",
     });
 
     const page1 = await repo.paginate({
@@ -98,6 +98,7 @@ describe("ordersRepository", () => {
       from: "X",
       to: "Y",
       amount: 1,
+      status: "in-progress",
     });
     await repo.create({
       source: "qubic",
@@ -105,6 +106,7 @@ describe("ordersRepository", () => {
       from: "Z",
       to: "T",
       amount: 2,
+      status: "finalized",
     });
 
     const solToQubic = await repo.paginate({
@@ -140,15 +142,21 @@ describe("ordersRepository", () => {
       from: "A",
       to: "B",
       amount: 50,
+      status: "in-progress",
     });
 
-    const updated = await repo.update(created!.id, { amount: 42 });
+    const updated = await repo.update(created!.id, {
+      amount: 42,
+      status: "finalized",
+    });
 
     assert.ok(updated);
     assert.strictEqual(updated?.amount, 42);
+    assert.strictEqual(updated?.status, "finalized");
 
     const fetched = await repo.findById(created!.id);
     assert.strictEqual(fetched?.amount, 42);
+    assert.strictEqual(fetched?.status, "finalized");
   });
 
   it("should return null when updating a non-existent order", async (t) => {
@@ -169,6 +177,7 @@ describe("ordersRepository", () => {
       from: "DeleteA",
       to: "DeleteB",
       amount: 7,
+      status: "finalized",
     });
 
     const removed = await repo.delete(created!.id);
