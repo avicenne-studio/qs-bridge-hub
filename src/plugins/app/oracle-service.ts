@@ -1,5 +1,6 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
+import { RECOMMENDED_POLLING_DEFAULTS } from "../infra/poller.js";
 
 type OracleStatus = "ok" | "down";
 
@@ -41,7 +42,7 @@ function createOracleService(urls: string[]): OracleService {
 
   urls.forEach((url) => {
     registry.set(url, {
-      status: "ok",
+      status: "down",
       timestamp: initialTimestamp,
     });
   });
@@ -77,15 +78,8 @@ function startHealthPolling(
   service: OracleService,
   urls: string[]
 ) {
-  /* c8 ignore start */
-  if (urls.length === 0) {
-    fastify.log.warn("No oracle URLs configured; skipping health polling");
-    return;
-  }
-  /* c8 ignore end */
-
   const client = fastify.undiciGetClient.create();
-  const defaults = fastify.poller.defaults;
+  const defaults = RECOMMENDED_POLLING_DEFAULTS
 
   const poller = fastify.poller.create({
     servers: urls,

@@ -45,7 +45,6 @@ export const RECOMMENDED_POLLING_DEFAULTS: Readonly<PollerOptions> =
 declare module "fastify" {
   interface FastifyInstance {
     poller: {
-      defaults: Readonly<PollerOptions>;
       create<TResponse>(config: CreatePollerConfig<TResponse>): PollerHandle;
     };
   }
@@ -153,7 +152,6 @@ export default fp(
     const handles = new Set<PollerHandle>();
 
     fastify.decorate("poller", {
-      defaults: RECOMMENDED_POLLING_DEFAULTS,
       create<TResponse>(config: CreatePollerConfig<TResponse>) {
         const handle = createPoller(config);
         handles.add(handle);
