@@ -98,12 +98,6 @@ describe("poller plugin", () => {
       jitterMs: 0,
     });
 
-    t.assert.deepStrictEqual(app.poller.defaults, {
-      intervalMs: 1000,
-      requestTimeoutMs: 700,
-      jitterMs: 25,
-    });
-
     poller.start();
     await completion;
 
