@@ -9,18 +9,13 @@ const BridgeHealthResponseSchema = Type.Object({
 
 const OracleHealthSchema = Type.Object({
   url: Type.String({ format: "uri" }),
-  status: Type.Literal("ok"),
+  status: Type.Union([Type.Literal("ok"), Type.Literal("down")]),
   timestamp: Type.String({ format: "date-time" }),
 });
 
 const OraclesHealthResponseSchema = Type.Object({
   oracles: Type.Array(OracleHealthSchema),
 });
-
-const DEFAULT_ORACLE_URLS = [
-  "https://oracle-1.example",
-  "https://oracle-2.example",
-] as const;
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   fastify.get(
@@ -33,7 +28,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      return { paused: true } as const
+      return { paused: true } as const;
     }
   );
 
@@ -47,13 +42,8 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      const timestamp = new Date().toISOString();
       return {
-        oracles: DEFAULT_ORACLE_URLS.map((url) => ({
-          url,
-          status: "ok" as const,
-          timestamp,
-        })),
+        oracles: fastify.oracleService.list(),
       };
     }
   );
