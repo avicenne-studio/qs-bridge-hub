@@ -137,5 +137,5 @@ bun.lockb
 pnpm-lock.yaml
 yarn.lock
 
-# uploaded files
-uploads/tasks/*
+
+data/oracle.sqlite3
