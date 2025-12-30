@@ -79,7 +79,7 @@ function startHealthPolling(
   urls: string[]
 ) {
   const client = fastify.undiciGetClient.create();
-  const defaults = RECOMMENDED_POLLING_DEFAULTS
+  const defaults = RECOMMENDED_POLLING_DEFAULTS;
 
   const poller = fastify.poller.create({
     servers: urls,
