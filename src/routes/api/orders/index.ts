@@ -34,14 +34,21 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
-const OrderSignaturesSchema = Type.Object({
-  orderId: Type.String(),
-  dest: OracleChain,
-  signatures: Type.Array(Type.String()),
+const OrderSignatureSchema = Type.Object({
+  id: Type.Integer({ minimum: 1 }),
+  order_id: Type.Integer({ minimum: 1 }),
+  signature: Type.String(),
 });
 
+const OrderWithSignaturesSchema = Type.Intersect([
+  StoredOrderSchema,
+  Type.Object({
+    signatures: Type.Array(OrderSignatureSchema),
+  }),
+]);
+
 const OrderSignaturesResponseSchema = Type.Object({
-  data: Type.Array(OrderSignaturesSchema),
+  data: Type.Array(OrderWithSignaturesSchema),
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
@@ -92,19 +99,11 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
+      const ids = await fastify.ordersRepository.findActivesIds();
+      const orders = await fastify.ordersRepository.findByIdsWithSignatures(ids);
+
       return {
-        data: [
-          {
-            orderId: "order-1",
-            dest: "solana" as const,
-            signatures: ["sigA", "sigB"],
-          },
-          {
-            orderId: "order-2",
-            dest: "qubic" as const,
-            signatures: ["sigC"],
-          },
-        ],
+        data: orders.filter((order) => order.signatures.length > 0),
       };
     }
   );

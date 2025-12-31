@@ -3,14 +3,20 @@ import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helper.js";
 
-describe("undici get client plugin", () => {
-  it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
+describe("undici client plugin", () => {
+  it("performs GET/POST requests with merged headers and JSON parsing", async (t: TestContext) => {
     const app = await build(t);
 
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
     const server = createServer((req, res) => {
       receivedHeaders.push(req.headers);
       if (req.url === "/poll") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (req.url === "/submit" && req.method === "POST") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
         return;
@@ -28,7 +34,7 @@ describe("undici get client plugin", () => {
     const { port } = server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;
 
-    const client = app.undiciGetClient.create({
+    const client = app.undiciClient.create({
       headers: { "x-default": "base" },
     });
 
@@ -43,8 +49,19 @@ describe("undici get client plugin", () => {
     t.assert.strictEqual(receivedHeaders[0]["x-extra"], "1");
     t.assert.strictEqual(receivedHeaders[0]["x-default"], "override");
 
+    const postResult = await client.postJson<{ ok: boolean }>(
+      origin,
+      "/submit",
+      { data: true },
+      undefined,
+      { "x-extra": "2" }
+    );
+    t.assert.deepStrictEqual(postResult, { ok: true });
+    t.assert.strictEqual(receivedHeaders[1]["x-extra"], "2");
+
+    await t.assert.rejects(client.getJson(origin, "/fail"), /HTTP 503/);
     await t.assert.rejects(
-      client.getJson(origin, "/fail"),
+      client.postJson(origin, "/fail", { ok: false }),
       /HTTP 503/
     );
 
@@ -54,7 +71,7 @@ describe("undici get client plugin", () => {
   it("closes created clients on app shutdown and exposes defaults", async (t: TestContext) => {
     const app = await build();
 
-    t.assert.deepStrictEqual(app.undiciGetClient.defaults, {
+    t.assert.deepStrictEqual(app.undiciClient.defaults, {
       connectionsPerOrigin: 1,
       pipelining: 1,
       headers: {},
@@ -63,7 +80,7 @@ describe("undici get client plugin", () => {
       connectTimeout: 5_000,
     });
 
-    const client = app.undiciGetClient.create();
+    const client = app.undiciClient.create();
     let closed = false;
     const originalClose = client.close.bind(client);
     client.close = async () => {
