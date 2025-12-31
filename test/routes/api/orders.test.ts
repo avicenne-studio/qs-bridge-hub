@@ -8,6 +8,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "A",
     to: "B",
     amount: 10,
+    is_relayable: false,
     status: "in-progress",
   });
   await app.ordersRepository.create({
@@ -16,6 +17,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "C",
     to: "D",
     amount: 25,
+    is_relayable: false,
     status: "finalized",
   });
 }
@@ -41,10 +43,42 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].from, "A");
   t.assert.strictEqual(body.data[0].dest, "qubic");
   t.assert.strictEqual(body.data[0].status, "in-progress");
+  t.assert.strictEqual(body.data[0].is_relayable, false);
 });
 
-test("GET /api/orders/signatures returns fixtures", async (t: TestContext) => {
+test("GET /api/orders/signatures returns stored signatures", async (t: TestContext) => {
   const app = await build(t);
+
+  const first = await app.ordersRepository.create({
+    source: "solana",
+    dest: "qubic",
+    from: "A",
+    to: "B",
+    amount: 10,
+    is_relayable: false,
+    status: "pending",
+  });
+  const second = await app.ordersRepository.create({
+    source: "qubic",
+    dest: "solana",
+    from: "C",
+    to: "D",
+    amount: 20,
+    is_relayable: false,
+    status: "in-progress",
+  });
+  await app.ordersRepository.create({
+    source: "qubic",
+    dest: "solana",
+    from: "E",
+    to: "F",
+    amount: 30,
+    is_relayable: false,
+    status: "finalized",
+  });
+
+  await app.ordersRepository.addSignatures(first!.id, ["sigA", "sigB"]);
+  await app.ordersRepository.addSignatures(second!.id, ["sigC"]);
 
   const res = await app.inject({
     url: "/api/orders/signatures",
@@ -53,12 +87,15 @@ test("GET /api/orders/signatures returns fixtures", async (t: TestContext) => {
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  t.assert.deepStrictEqual(body, {
-    data: [
-      { orderId: "order-1", dest: "solana", signatures: ["sigA", "sigB"] },
-      { orderId: "order-2", dest: "qubic", signatures: ["sigC"] },
-    ],
-  });
+  t.assert.strictEqual(body.data.length, 2);
+
+  const byId = new Map(body.data.map((order: { id: number; signatures: { signature: string }[] }) => [
+    order.id,
+    order.signatures.map((entry) => entry.signature).sort(),
+  ]));
+
+  t.assert.deepStrictEqual(byId.get(first!.id), ["sigA", "sigB"]);
+  t.assert.deepStrictEqual(byId.get(second!.id), ["sigC"]);
 });
 
 test("GET /api/orders handles repository errors", async (t: TestContext) => {

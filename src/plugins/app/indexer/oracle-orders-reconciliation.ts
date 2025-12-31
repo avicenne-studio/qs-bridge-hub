@@ -28,7 +28,8 @@ function ensureIdenticalOrders(orders: OracleOrder[]) {
       order.dest !== first.dest ||
       order.from !== first.from ||
       order.to !== first.to ||
-      order.amount !== first.amount
+      order.amount !== first.amount ||
+      order.is_relayable !== first.is_relayable
     ) {
       throw new Error("Orders to reconcile must be identical");
     }

@@ -1,7 +1,10 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import knex, { Knex } from "knex";
-import { ORDERS_TABLE_NAME } from "../app/indexer/orders.repository.js";
+import {
+  ORDERS_TABLE_NAME,
+  ORDER_SIGNATURES_TABLE_NAME,
+} from "../app/indexer/orders.repository.js";
 
 declare module "fastify" {
   export interface FastifyInstance {
@@ -32,8 +35,8 @@ export default fp(
     });
 
     fastify.addHook("onReady", async () => {
-      const hasTable = await fastify.knex.schema.hasTable(ORDERS_TABLE_NAME);
-      if (!hasTable) {
+      const hasOrdersTable = await fastify.knex.schema.hasTable(ORDERS_TABLE_NAME);
+      if (!hasOrdersTable) {
         await fastify.knex.schema.createTable(ORDERS_TABLE_NAME, (table) => {
           table.increments("id");
           table.string("source").notNullable();
@@ -41,8 +44,24 @@ export default fp(
           table.string("from").notNullable();
           table.string("to").notNullable();
           table.float("amount").notNullable();
+          table.boolean("is_relayable").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
+      }
+
+      const hasSignaturesTable = await fastify.knex.schema.hasTable(
+        ORDER_SIGNATURES_TABLE_NAME
+      );
+      if (!hasSignaturesTable) {
+        await fastify.knex.schema.createTable(
+          ORDER_SIGNATURES_TABLE_NAME,
+          (table) => {
+            table.increments("id");
+            table.integer("order_id").notNullable();
+            table.string("signature").notNullable();
+            table.unique(["order_id", "signature"]);
+          }
+        );
       }
     });
   },

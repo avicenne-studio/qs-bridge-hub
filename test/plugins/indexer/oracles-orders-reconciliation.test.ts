@@ -9,6 +9,7 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   from: "A",
   to: "B",
   amount: 10,
+  is_relayable: false,
 };
 
 describe("oracleOrdersReconciliatior plugin", () => {
@@ -34,6 +35,19 @@ describe("oracleOrdersReconciliatior plugin", () => {
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
       { ...baseOrder, to: "C", status: "finalized" },
+    ];
+
+    t.assert.throws(() =>
+      app.oracleOrdersReconciliatior.reconcile(orders)
+    );
+  });
+
+  it("throws when relayable flags differ", async (t: TestContext) => {
+    const app = await build(t);
+
+    const orders: OracleOrder[] = [
+      { ...baseOrder, status: "finalized" },
+      { ...baseOrder, is_relayable: true, status: "finalized" },
     ];
 
     t.assert.throws(() =>

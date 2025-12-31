@@ -2,7 +2,7 @@ import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { Dispatcher, Pool, request } from "undici";
 
-export interface UndiciGetClientOptions {
+export interface UndiciClientOptions {
   connectionsPerOrigin?: number;
   pipelining?: number;
   headers?: Record<string, string>;
@@ -12,10 +12,10 @@ export interface UndiciGetClientOptions {
 }
 
 type ResolvedOptions = Required<
-  Omit<UndiciGetClientOptions, "headers">
+  Omit<UndiciClientOptions, "headers">
 > & { headers: Record<string, string> };
 
-const DEFAULT_GET_CLIENT_OPTIONS: ResolvedOptions = Object.freeze({
+const DEFAULT_CLIENT_OPTIONS: ResolvedOptions = Object.freeze({
   connectionsPerOrigin: 1,
   pipelining: 1,
   headers: {},
@@ -24,22 +24,22 @@ const DEFAULT_GET_CLIENT_OPTIONS: ResolvedOptions = Object.freeze({
   connectTimeout: 5_000,
 });
 
-export class UndiciGetClient {
+export class UndiciClient {
   private readonly pools = new Map<string, Pool>();
   private readonly opts: ResolvedOptions;
 
-  constructor(opts: UndiciGetClientOptions = {}) {
+  constructor(opts: UndiciClientOptions = {}) {
     this.opts = {
       connectionsPerOrigin:
-        opts.connectionsPerOrigin ?? DEFAULT_GET_CLIENT_OPTIONS.connectionsPerOrigin,
-      pipelining: opts.pipelining ?? DEFAULT_GET_CLIENT_OPTIONS.pipelining,
-      headers: { ...DEFAULT_GET_CLIENT_OPTIONS.headers, ...(opts.headers ?? {}) },
+        opts.connectionsPerOrigin ?? DEFAULT_CLIENT_OPTIONS.connectionsPerOrigin,
+      pipelining: opts.pipelining ?? DEFAULT_CLIENT_OPTIONS.pipelining,
+      headers: { ...DEFAULT_CLIENT_OPTIONS.headers, ...(opts.headers ?? {}) },
       keepAliveTimeout:
-        opts.keepAliveTimeout ?? DEFAULT_GET_CLIENT_OPTIONS.keepAliveTimeout,
+        opts.keepAliveTimeout ?? DEFAULT_CLIENT_OPTIONS.keepAliveTimeout,
       keepAliveMaxTimeout:
-        opts.keepAliveMaxTimeout ?? DEFAULT_GET_CLIENT_OPTIONS.keepAliveMaxTimeout,
+        opts.keepAliveMaxTimeout ?? DEFAULT_CLIENT_OPTIONS.keepAliveMaxTimeout,
       connectTimeout:
-        opts.connectTimeout ?? DEFAULT_GET_CLIENT_OPTIONS.connectTimeout,
+        opts.connectTimeout ?? DEFAULT_CLIENT_OPTIONS.connectTimeout,
     };
   }
 
@@ -78,6 +78,32 @@ export class UndiciGetClient {
     return (await res.body.json()) as T;
   }
 
+  async postJson<T>(
+    origin: string,
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+    headers?: Record<string, string>
+  ): Promise<T> {
+    const res = await request(`${origin}${path}`, {
+      method: "POST",
+      dispatcher: this.poolFor(origin),
+      signal,
+      headers: {
+        "content-type": "application/json",
+        ...this.opts.headers,
+        ...(headers ?? {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw new Error(`HTTP ${res.statusCode}`);
+    }
+
+    return (await res.body.json()) as T;
+  }
+
   async close(): Promise<void> {
     const pools = [...this.pools.values()];
     this.pools.clear();
@@ -87,21 +113,21 @@ export class UndiciGetClient {
 
 declare module "fastify" {
   interface FastifyInstance {
-    undiciGetClient: {
+    undiciClient: {
       defaults: Readonly<ResolvedOptions>;
-      create(options?: UndiciGetClientOptions): UndiciGetClient;
+      create(options?: UndiciClientOptions): UndiciClient;
     };
   }
 }
 
 export default fp(
-  function undiciGetClientPlugin(fastify: FastifyInstance) {
-    const clients = new Set<UndiciGetClient>();
+  function undiciClientPlugin(fastify: FastifyInstance) {
+    const clients = new Set<UndiciClient>();
 
-    fastify.decorate("undiciGetClient", {
-      defaults: DEFAULT_GET_CLIENT_OPTIONS,
-      create(options?: UndiciGetClientOptions) {
-        const client = new UndiciGetClient(options);
+    fastify.decorate("undiciClient", {
+      defaults: DEFAULT_CLIENT_OPTIONS,
+      create(options?: UndiciClientOptions) {
+        const client = new UndiciClient(options);
         clients.add(client);
         return client;
       },
@@ -117,6 +143,6 @@ export default fp(
     });
   },
   {
-    name: "undici-get-client",
+    name: "undici-client",
   }
 );

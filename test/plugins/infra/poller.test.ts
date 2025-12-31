@@ -164,7 +164,7 @@ describe("poller plugin", () => {
 
     type Response = { server: string; round: number };
 
-    const client = app.undiciGetClient.create();
+    const client = app.undiciClient.create();
     const observed: Response[][] = [];
 
     let done: (() => void) | null = null;
