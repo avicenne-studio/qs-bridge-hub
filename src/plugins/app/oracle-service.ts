@@ -198,6 +198,7 @@ function startOrdersPolling(
         const orderId = group[0].id;
         const signatures = group.map((entry) => entry.signature);
         const reconciledOrders = group.map(
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           ({ signature: _signature, id: _id, ...order }) => order
         );
 
