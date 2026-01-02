@@ -6,6 +6,7 @@ import {
   OracleChain,
   OracleOrderSchema,
 } from "../../../plugins/app/indexer/schemas/order.js";
+import { StringSchema } from "../../../plugins/app/common/schemas/common.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -34,21 +35,15 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
-const OrderSignatureSchema = Type.Object({
-  id: Type.Integer({ minimum: 1 }),
-  order_id: Type.Integer({ minimum: 1 }),
-  signature: Type.String(),
+const SignatureSchema = StringSchema;
+
+const RelayableSignatureSchema = Type.Object({
+  orderId: Type.Integer({ minimum: 1 }),
+  signatures: Type.Array(SignatureSchema, { minItems: 1 }),
 });
 
-const OrderWithSignaturesSchema = Type.Intersect([
-  StoredOrderSchema,
-  Type.Object({
-    signatures: Type.Array(OrderSignatureSchema),
-  }),
-]);
-
-const OrderSignaturesResponseSchema = Type.Object({
-  data: Type.Array(OrderWithSignaturesSchema),
+const RelayableSignaturesSchema = Type.Object({
+  data: Type.Array(RelayableSignatureSchema),
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
@@ -94,7 +89,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         response: {
-          200: OrderSignaturesResponseSchema,
+          200: RelayableSignaturesSchema,
         },
       },
     },
@@ -103,7 +98,12 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       const orders = await fastify.ordersRepository.findByIdsWithSignatures(ids);
 
       return {
-        data: orders.filter((order) => order.signatures.length > 0),
+        data: orders
+          .filter((order) => order.signatures.length > 0)
+          .map((order) => ({
+            orderId: order.id,
+            signatures: order.signatures.map((signature) => signature.signature),
+          })),
       };
     }
   );

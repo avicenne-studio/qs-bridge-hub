@@ -7,6 +7,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const created = await repo.create({
+      id: 101,
       source: "solana",
       dest: "qubic",
       from: "Alice",
@@ -17,7 +18,7 @@ describe("ordersRepository", () => {
     });
 
     t.assert.ok(created);
-    t.assert.strictEqual(created?.id, 1);
+    t.assert.strictEqual(created?.id, 101);
     t.assert.strictEqual(created?.source, "solana");
     t.assert.strictEqual(created?.dest, "qubic");
     t.assert.strictEqual(created?.from, "Alice");
@@ -44,6 +45,7 @@ describe("ordersRepository", () => {
 
     // Insert 3 orders
     await repo.create({
+      id: 10,
       source: "solana",
       dest: "qubic",
       from: "A",
@@ -53,6 +55,7 @@ describe("ordersRepository", () => {
       status: "in-progress",
     });
     await repo.create({
+      id: 20,
       source: "solana",
       dest: "qubic",
       from: "C",
@@ -62,6 +65,7 @@ describe("ordersRepository", () => {
       status: "finalized",
     });
     await repo.create({
+      id: 30,
       source: "qubic",
       dest: "solana",
       from: "E",
@@ -79,8 +83,8 @@ describe("ordersRepository", () => {
 
     t.assert.strictEqual(page1.orders.length, 2);
     t.assert.strictEqual(page1.total, 3);
-    t.assert.strictEqual(page1.orders[0].id, 1);
-    t.assert.strictEqual(page1.orders[1].id, 2);
+    t.assert.strictEqual(page1.orders[0].id, 10);
+    t.assert.strictEqual(page1.orders[1].id, 20);
 
     const page2 = await repo.paginate({
       page: 2,
@@ -89,7 +93,7 @@ describe("ordersRepository", () => {
     });
 
     t.assert.strictEqual(page2.orders.length, 1);
-    t.assert.strictEqual(page2.orders[0].id, 3);
+    t.assert.strictEqual(page2.orders[0].id, 30);
   });
 
   it("should filter by source or dest", async (t: TestContext) => {
@@ -97,6 +101,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     await repo.create({
+      id: 11,
       source: "solana",
       dest: "qubic",
       from: "X",
@@ -106,6 +111,7 @@ describe("ordersRepository", () => {
       status: "in-progress",
     });
     await repo.create({
+      id: 12,
       source: "qubic",
       dest: "solana",
       from: "Z",
@@ -143,6 +149,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const created = await repo.create({
+      id: 44,
       source: "solana",
       dest: "qubic",
       from: "A",
@@ -182,6 +189,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const created = await repo.create({
+      id: 55,
       source: "solana",
       dest: "qubic",
       from: "DeleteA",
@@ -230,6 +238,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const created = await repo.create({
+      id: 77,
       source: "solana",
       dest: "qubic",
       from: "SigA",
@@ -262,6 +271,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const created = await repo.create({
+      id: 78,
       source: "solana",
       dest: "qubic",
       from: "NoSigA",
@@ -281,6 +291,7 @@ describe("ordersRepository", () => {
     const repo = app.ordersRepository;
 
     const pending = await repo.create({
+      id: 90,
       source: "solana",
       dest: "qubic",
       from: "P",
@@ -290,6 +301,7 @@ describe("ordersRepository", () => {
       status: "pending",
     });
     const inProgress = await repo.create({
+      id: 91,
       source: "solana",
       dest: "qubic",
       from: "R",
@@ -299,6 +311,7 @@ describe("ordersRepository", () => {
       status: "in-progress",
     });
     await repo.create({
+      id: 92,
       source: "solana",
       dest: "qubic",
       from: "T",

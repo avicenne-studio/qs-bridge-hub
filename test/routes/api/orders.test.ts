@@ -3,6 +3,7 @@ import { build } from "../../helper.js";
 
 async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
   await app.ordersRepository.create({
+    id: 401,
     source: "solana",
     dest: "qubic",
     from: "A",
@@ -12,6 +13,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     status: "in-progress",
   });
   await app.ordersRepository.create({
+    id: 402,
     source: "qubic",
     dest: "solana",
     from: "C",
@@ -50,6 +52,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
   const app = await build(t);
 
   const first = await app.ordersRepository.create({
+    id: 501,
     source: "solana",
     dest: "qubic",
     from: "A",
@@ -59,6 +62,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     status: "pending",
   });
   const second = await app.ordersRepository.create({
+    id: 502,
     source: "qubic",
     dest: "solana",
     from: "C",
@@ -68,6 +72,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     status: "in-progress",
   });
   await app.ordersRepository.create({
+    id: 503,
     source: "qubic",
     dest: "solana",
     from: "E",
@@ -89,10 +94,12 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
   const body = JSON.parse(res.payload);
   t.assert.strictEqual(body.data.length, 2);
 
-  const byId = new Map(body.data.map((order: { id: number; signatures: { signature: string }[] }) => [
-    order.id,
-    order.signatures.map((entry) => entry.signature).sort(),
-  ]));
+  const byId = new Map(
+    body.data.map((order: { orderId: number; signatures: string[] }) => [
+      order.orderId,
+      order.signatures.slice().sort(),
+    ])
+  );
 
   t.assert.deepStrictEqual(byId.get(first!.id), ["sigA", "sigB"]);
   t.assert.deepStrictEqual(byId.get(second!.id), ["sigC"]);
