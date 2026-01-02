@@ -330,6 +330,7 @@ describe("oracle service", () => {
       markOraclesHealthy(app, [ORACLE_URLS[0], ORACLE_URLS[1]]); // Don't set the third healthy
 
       const created = await app.ordersRepository.create({
+        id: 1,
         source: "solana",
         dest: "qubic",
         from: "A",
