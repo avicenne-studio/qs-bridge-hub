@@ -59,20 +59,20 @@ function createRepository(fastify: FastifyInstance) {
         query.where({ dest: q.dest });
       }
 
-      const rows = await query
+      const rows = (await query
         .limit(q.limit)
         .offset(offset)
-        .orderBy("id", q.order);
+        .orderBy("id", q.order)) as unknown as OrderWithTotal[];
 
       const orders = rows.map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { total: _total, ...orderRow } = row as OrderWithTotal;
-        return normalizeStoredOrder(orderRow as StoredOrder);
+        const { total: _total, ...orderRow } = row;
+        return normalizeStoredOrder(orderRow);
       });
 
       return {
         orders,
-        total: rows.length > 0 ? Number((rows[0] as OrderWithTotal).total) : 0,
+        total: rows.length > 0 ? Number(rows[0].total) : 0,
       };
     },
 
