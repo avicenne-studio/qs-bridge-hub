@@ -274,6 +274,7 @@ describe("oracle service", () => {
       const app = await withApp(t);
 
       const created = await app.ordersRepository.create({
+        id: 101,
         source: "solana",
         dest: "qubic",
         from: "A",
@@ -313,6 +314,7 @@ describe("oracle service", () => {
 
       const app = await withApp(t);
       await app.ordersRepository.create({
+        id: 201,
         source: "solana",
         dest: "qubic",
         from: "A",
@@ -348,6 +350,7 @@ describe("oracle service", () => {
 
       const app = await withApp(t);
       const created = await app.ordersRepository.create({
+        id: 301,
         source: "solana",
         dest: "qubic",
         from: "A",

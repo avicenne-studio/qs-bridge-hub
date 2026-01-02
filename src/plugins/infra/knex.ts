@@ -38,7 +38,7 @@ export default fp(
       const hasOrdersTable = await fastify.knex.schema.hasTable(ORDERS_TABLE_NAME);
       if (!hasOrdersTable) {
         await fastify.knex.schema.createTable(ORDERS_TABLE_NAME, (table) => {
-          table.increments("id");
+          table.integer("id").primary().notNullable();
           table.string("source").notNullable();
           table.string("dest").notNullable();
           table.string("from").notNullable();

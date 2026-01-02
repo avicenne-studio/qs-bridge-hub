@@ -12,9 +12,9 @@ declare module "fastify" {
   }
 }
 
-type PersistedOrder = OracleOrder;
-type StoredOrder = OracleOrder & { id: number };
-type CreateOrder = OracleOrder;
+type PersistedOrder = OracleOrder & { id: number };
+type StoredOrder = PersistedOrder;
+type CreateOrder = PersistedOrder;
 type UpdateOrder = Partial<OracleOrder>;
 type PersistedSignature = {
   order_id: number;
@@ -48,7 +48,7 @@ function createRepository(fastify: FastifyInstance) {
       const offset = (q.page - 1) * q.limit;
 
       const query = knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select(knex.raw("rowid as id"), "*")
+        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
         .select(knex.raw("count(*) OVER() as total"));
 
       if (q.source !== undefined) {
@@ -59,39 +59,39 @@ function createRepository(fastify: FastifyInstance) {
         query.where({ dest: q.dest });
       }
 
-      const rows = await query
+      const rows = (await query
         .limit(q.limit)
         .offset(offset)
-        .orderBy("rowid", q.order);
+        .orderBy("id", q.order)) as unknown as OrderWithTotal[];
 
       const orders = rows.map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { total: _total, ...orderRow } = row as OrderWithTotal;
-        return normalizeStoredOrder(orderRow as StoredOrder);
+        const { total: _total, ...orderRow } = row;
+        return normalizeStoredOrder(orderRow);
       });
 
       return {
         orders,
-        total: rows.length > 0 ? Number((rows[0] as OrderWithTotal).total) : 0,
+        total: rows.length > 0 ? Number(rows[0].total) : 0,
       };
     },
 
     async findById(id: number) {
       const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select(knex.raw("rowid as id"), "*")
-        .where("rowid", id)
+        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
+        .where("id", id)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
     },
 
     async create(newOrder: CreateOrder) {
-      const [id] = await knex<PersistedOrder>(ORDERS_TABLE_NAME).insert(newOrder);
-      return this.findById(Number(id));
+      await knex<PersistedOrder>(ORDERS_TABLE_NAME).insert(newOrder);
+      return this.findById(newOrder.id);
     },
 
     async update(id: number, changes: UpdateOrder) {
       const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .where("rowid", id)
+        .where("id", id)
         .update(changes);
 
       if (affectedRows === 0) {
@@ -103,7 +103,7 @@ function createRepository(fastify: FastifyInstance) {
 
     async delete(id: number) {
       const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .where("rowid", id)
+        .where("id", id)
         .delete();
 
       return affectedRows > 0;
@@ -111,9 +111,9 @@ function createRepository(fastify: FastifyInstance) {
 
     async findActivesIds(limit = 100) {
       const rows = await knex<{ id: number }>(ORDERS_TABLE_NAME)
-        .select({ id: "rowid" })
+        .select("id")
         .whereIn("status", ["pending", "in-progress"])
-        .orderBy("rowid", "asc")
+        .orderBy("id", "asc")
         .limit(limit);
 
       return rows.map((row) => Number(row.id));
@@ -153,9 +153,9 @@ function createRepository(fastify: FastifyInstance) {
       }
 
       const orders = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select(knex.raw("rowid as id"), "*")
-        .whereIn("rowid", ids)
-        .orderBy("rowid", "asc");
+        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
+        .whereIn("id", ids)
+        .orderBy("id", "asc");
 
       if (orders.length === 0) {
         return [];
