@@ -1,5 +1,5 @@
 import { test, TestContext } from "node:test";
-import { build } from "../helper.js";
+import { build } from "../helpers/build.js";
 
 test("GET /", async (t: TestContext) => {
   const app = await build(t);

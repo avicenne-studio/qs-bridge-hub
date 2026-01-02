@@ -1,6 +1,6 @@
 import { describe, it, TestContext } from "node:test";
 
-import { build } from "../../helper.js";
+import { build } from "../../helpers/build.js";
 import { OracleOrder } from "../../../src/plugins/app/indexer/schemas/order.js";
 
 const baseOrder: Omit<OracleOrder, "status"> = {

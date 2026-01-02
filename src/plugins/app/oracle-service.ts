@@ -158,6 +158,7 @@ function startHealthPolling(
 
 function startOrdersPolling(
   fastify: FastifyInstance,
+  service: OracleServiceCore,
   urls: string[]
 ): PollerHandle {
   const client = fastify.undiciClient.create();
@@ -166,6 +167,11 @@ function startOrdersPolling(
   const poller = fastify.poller.create<OracleOrderWithSignature[]>({
     servers: urls,
     fetchOne: async (server, signal) => {
+      const entry = service.list().find((item) => item.url === server);
+      if (!entry || entry.status !== "ok") {
+        return [];
+      }
+
       const ids = await fastify.ordersRepository.findActivesIds();
       if (ids.length === 0) {
         return [];
@@ -241,7 +247,7 @@ export default fp(
   async function oracleServicePlugin(fastify: FastifyInstance) {
     const urls = parseOracleUrls(fastify.config.ORACLE_URLS);
     const serviceCore = createOracleService(urls);
-    const ordersPoller = startOrdersPolling(fastify, urls);
+    const ordersPoller = startOrdersPolling(fastify, serviceCore, urls);
 
     const pollOrders = () => ordersPoller;
 

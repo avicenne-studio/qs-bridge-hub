@@ -1,15 +1,16 @@
 import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
-import { build, waitFor } from "../../helper.js";
+import { build } from "../../helpers/build.js";
 import { groupOrdersById } from "../../../src/plugins/app/oracle-service.js";
 import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-service.js";
 import { FastifyInstance } from "fastify";
+import { waitFor } from "../../helpers/wait-for.js";
 
 const ORACLE_URLS = [
   "http://127.0.0.1:6101",
   "http://127.0.0.1:6102",
   "http://127.0.0.1:6103",
-] as const;
+];
 
 type ResponseMode = "data" | "array" | "empty";
 
@@ -106,6 +107,13 @@ function createOrdersServer(opts: {
 
 function getOracleEntry(app: FastifyInstance, url: string) {
   return app.oracleService.list().find((e) => e.url === url);
+}
+
+function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
+  const timestamp = new Date().toISOString();
+  for (const url of urls) {
+    app.oracleService.update(url, { status: "ok", timestamp });
+  }
 }
 
 async function withApp(t: TestContext) {
@@ -272,6 +280,7 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
 
       const created = await app.ordersRepository.create({
         id: 101,
@@ -303,6 +312,50 @@ describe("oracle service", () => {
       t.assert.strictEqual(withSignatures[0].signatures.length, 3);
     });
 
+    test("skips unhealthy oracles when polling orders", async (t: TestContext) => {
+      let downCalls = 0;
+
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          (id) => {
+            downCalls += 1;
+            return orderBase({ id, signature: "sig-3", status: "finalized" });
+          },
+        ],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, [ORACLE_URLS[0], ORACLE_URLS[1]]); // Don't set the third healthy
+
+      const created = await app.ordersRepository.create({
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: 10,
+        is_relayable: false,
+        status: "pending",
+      });
+
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await app.ordersRepository.findById(created!.id);
+        return updated?.status === "finalized";
+      }, 10_000);
+
+      await handle.stop();
+
+      const withSignatures = await app.ordersRepository.findByIdsWithSignatures([
+        created!.id,
+      ]);
+      t.assert.strictEqual(withSignatures[0].signatures.length, 2);
+      t.assert.strictEqual(downCalls, 0);
+    });
+
     test("logs when reconciliation fails for mismatched orders", async (t: TestContext) => {
       await setupThreeOrderServers(t, {
         builders: [
@@ -313,6 +366,7 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
       await app.ordersRepository.create({
         id: 201,
         source: "solana",
@@ -349,6 +403,7 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
       const created = await app.ordersRepository.create({
         id: 301,
         source: "solana",

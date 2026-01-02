@@ -1,5 +1,5 @@
 import { it, describe, TestContext } from "node:test";
-import { build } from "../../helper.js";
+import { build } from "../../helpers/build.js";
 
 describe("ordersRepository", () => {
   it("should create and retrieve an order by id", async (t: TestContext) => {

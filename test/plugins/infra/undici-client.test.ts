@@ -1,7 +1,7 @@
 import { describe, it, TestContext } from "node:test";
 import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
-import { build } from "../../helper.js";
+import { build } from "../../helpers/build.js";
 
 describe("undici client plugin", () => {
   it("performs GET/POST requests with merged headers and JSON parsing", async (t: TestContext) => {

@@ -1,5 +1,5 @@
 import { it, TestContext } from "node:test";
-import { build } from "../helper.js";
+import { build } from "../helpers/build.js";
 
 it("should correctly handle CORS preflight requests", async (t: TestContext) => {
   const app = await build(t);

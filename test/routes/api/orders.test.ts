@@ -1,5 +1,5 @@
 import { test, TestContext } from "node:test";
-import { build } from "../../helper.js";
+import { build } from "../../helpers/build.js";
 
 async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
   await app.ordersRepository.create({
