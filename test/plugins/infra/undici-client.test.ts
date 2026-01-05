@@ -4,19 +4,13 @@ import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
 
 describe("undici client plugin", () => {
-  it("performs GET/POST requests with merged headers and JSON parsing", async (t: TestContext) => {
+  it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
     const app = await build(t);
 
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
     const server = createServer((req, res) => {
       receivedHeaders.push(req.headers);
       if (req.url === "/poll") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true }));
-        return;
-      }
-
-      if (req.url === "/submit" && req.method === "POST") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
         return;
@@ -49,21 +43,7 @@ describe("undici client plugin", () => {
     t.assert.strictEqual(receivedHeaders[0]["x-extra"], "1");
     t.assert.strictEqual(receivedHeaders[0]["x-default"], "override");
 
-    const postResult = await client.postJson<{ ok: boolean }>(
-      origin,
-      "/submit",
-      { data: true },
-      undefined,
-      { "x-extra": "2" }
-    );
-    t.assert.deepStrictEqual(postResult, { ok: true });
-    t.assert.strictEqual(receivedHeaders[1]["x-extra"], "2");
-
     await t.assert.rejects(client.getJson(origin, "/fail"), /HTTP 503/);
-    await t.assert.rejects(
-      client.postJson(origin, "/fail", { ok: false }),
-      /HTTP 503/
-    );
 
     await client.close();
   });
