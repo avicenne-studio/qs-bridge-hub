@@ -37,12 +37,6 @@ function closeAll(servers: Server[]) {
   servers.forEach((s) => s.close());
 }
 
-async function readJson(req: NodeJS.ReadableStream) {
-  let body = "";
-  for await (const chunk of req) body += chunk.toString();
-  return body.length > 0 ? JSON.parse(body) : {};
-}
-
 function createHealthServer(opts: {
   mode: "healthy" | "failing" | "slow";
   onHealthyRequest?: () => void;
@@ -72,21 +66,30 @@ function createHealthServer(opts: {
 }
 
 function createOrdersServer(opts: {
-  handler: (ids: number[]) => OracleOrderWithSignature[];
+  handler: () => OracleOrderWithSignature[];
   responseMode?: ResponseMode;
+  healthStatus?: "ok" | "down" | "slow";
 }) {
-  const { handler, responseMode = "data" } = opts;
+  const { handler, responseMode = "data", healthStatus = "ok" } = opts;
 
   return createServer(async (req, res) => {
     if (req.url === "/api/health") {
+      if (healthStatus === "slow") {
+        return;
+      }
+
+      if (healthStatus === "down") {
+        res.writeHead(503).end();
+        return;
+      }
+
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
       return;
     }
 
-    if (req.url === "/api/orders" && req.method === "POST") {
-      const { ids } = await readJson(req);
-      const payload = handler((ids ?? []) as number[]);
+    if (req.url === "/api/orders" && req.method === "GET") {
+      const payload = handler();
 
       res.writeHead(200, { "content-type": "application/json" });
 
@@ -246,22 +249,36 @@ describe("oracle service", () => {
       opts: {
         builders: Array<(id: number) => OracleOrderWithSignature>;
         responseModes?: [ResponseMode?, ResponseMode?, ResponseMode?];
+        orderIds?: number[];
+        healthStatuses?: [
+          "ok" | "down" | "slow",
+          "ok" | "down" | "slow",
+          "ok" | "down" | "slow"
+        ];
       }
     ) {
-      const { builders, responseModes = ["data", "data", "data"] } = opts;
+      const {
+        builders,
+        responseModes = ["data", "data", "data"],
+        orderIds = [1],
+        healthStatuses = ["ok", "ok", "ok"],
+      } = opts;
 
       const servers = [
         createOrdersServer({
-          handler: (ids) => ids.map(builders[0]),
+          handler: () => orderIds.map(builders[0]),
           responseMode: responseModes[0],
+          healthStatus: healthStatuses[0],
         }),
         createOrdersServer({
-          handler: (ids) => ids.map(builders[1]),
+          handler: () => orderIds.map(builders[1]),
           responseMode: responseModes[1],
+          healthStatus: healthStatuses[1],
         }),
         createOrdersServer({
-          handler: (ids) => ids.map(builders[2]),
+          handler: () => orderIds.map(builders[2]),
           responseMode: responseModes[2],
+          healthStatus: healthStatuses[2],
         }),
       ];
 
@@ -277,6 +294,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-3", "pending"),
         ],
         responseModes: ["data", "data", "array"],
+        orderIds: [101],
       });
 
       const app = await withApp(t);
@@ -324,6 +342,8 @@ describe("oracle service", () => {
             return orderBase({ id, signature: "sig-3", status: "finalized" });
           },
         ],
+        orderIds: [1],
+        healthStatuses: ["ok", "ok", "down"],
       });
 
       const app = await withApp(t);
@@ -364,6 +384,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-2", "finalized"),
           serverOrderFactory("sig-3", "finalized", { amount: 11 }),
         ],
+        orderIds: [201],
       });
 
       const app = await withApp(t);
@@ -401,6 +422,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-3", "finalized"),
         ],
         responseModes: ["data", "data", "empty"],
+        orderIds: [301],
       });
 
       const app = await withApp(t);

@@ -172,16 +172,10 @@ function startOrdersPolling(
         return [];
       }
 
-      const ids = await fastify.ordersRepository.findActivesIds();
-      if (ids.length === 0) {
-        return [];
-      }
-
       try {
-        const payload = await client.postJson<OracleOrdersResponse>(
+        const payload = await client.getJson<OracleOrdersResponse>(
           server,
           "/api/orders",
-          { ids },
           signal
         );
         return normalizeOrdersPayload(payload);
