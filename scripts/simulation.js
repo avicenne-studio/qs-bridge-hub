@@ -10,7 +10,7 @@ rmSync(tmpRoot, { recursive: true, force: true });
 mkdirSync(tmpRoot, { recursive: true });
 
 const hubs = [
-  { id: "hub-1", port: 3010, role: "primary", up: true },
+  { id: "hub-1", port: 3010, role: "primary", up: false },
   { id: "hub-2", port: 3011, role: "fallback", up: true },
 ];
 

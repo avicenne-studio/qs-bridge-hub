@@ -8,6 +8,7 @@ declare module 'fastify' {
       RATE_LIMIT_MAX: number;
       SQLITE_DB_FILE: string;
       ORACLE_URLS: string;
+      HUB_KEYS_FILE: string;
     };
   }
 }
@@ -17,7 +18,8 @@ const schema = {
   required: [
     'SQLITE_DB_FILE',
     'PORT',
-    'ORACLE_URLS'
+    'ORACLE_URLS',
+    'HUB_KEYS_FILE'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -33,6 +35,9 @@ const schema = {
     ORACLE_URLS: {
       type: 'string',
       pattern: '^https?:\\/\\/[A-Za-z0-9.-]+(?::\\d+)?(,https?:\\/\\/[A-Za-z0-9.-]+(?::\\d+)?)*$'
+    },
+    HUB_KEYS_FILE: {
+      type: 'string',
     },
   }
 }
