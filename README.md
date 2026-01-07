@@ -25,6 +25,31 @@ Set `SQLITE_DB_FILE` to the database path.
 
 The Hub creates the SQLite database automatically on first launch.
 
+## Security: Hub Identity & Key Rotation
+
+Oracles verify Hub identity.
+You can access `GET /api/keys`, which returns the hub id plus public key material (current + optional next) and SHA-256 fingerprints. The Hub signs every outbound oracle poll request using the `HUB_KEYS_FILE` JSON (`hubId`, `current`, optional `next`) so oracles can validate the signature and plan ahead for rotations.
+
+When rotating keys, publish the new key under `next`, roll it out to oracles, then promote it to `current` once all oracles trust it.
+
+Generate a new key pair (prints JSON payload):
+
+```bash
+npm run generate-key-pair
+```
+
+Derive a public key from a private key PEM:
+
+```bash
+npm run generate-public-key -- ./path/to/private-key.pem
+```
+
+Inline PEM works too (use `\\n` for newlines):
+
+```bash
+npm run generate-public-key -- "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
+```
+
 
 ## Development
 

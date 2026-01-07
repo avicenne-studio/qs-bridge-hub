@@ -16,7 +16,9 @@
     "test:run": "glob -c \"tsx --env-file=.env.test --test\" \"./test/**/*.ts\"",
     "lint": "eslint --ignore-pattern=dist",
     "lint:fix": "npm run lint -- --fix",
-    "simulation": "node scripts/simulation.js"
+    "simulation": "node scripts/simulation.js",
+    "generate-key-pair": "node scripts/generate-key-pair.js",
+    "generate-public-key": "node scripts/generate-public-key.js"
   },
   "keywords": [],
   "author": "Michelet Jean <jean.antoine.michelet@gmail.com>",
