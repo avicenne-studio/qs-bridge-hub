@@ -10,7 +10,6 @@ rmSync(tmpRoot, { recursive: true, force: true });
 mkdirSync(tmpRoot, { recursive: true });
 
 const DEFAULT_ORACLE_URLS =
-  process.env.SIM_ORACLE_URLS ??
   "http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003";
 
 const FIXTURE_KEYS_FILE = resolve(

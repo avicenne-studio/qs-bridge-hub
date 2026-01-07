@@ -22,8 +22,7 @@ export function hashBody(body?: string | Buffer | Uint8Array): string {
     return createHash("sha256").update("").digest("hex");
   }
 
-  const payload =
-    typeof body === "string" ? Buffer.from(body) : Buffer.from(body);
+  const payload = Buffer.from(body);
 
   return createHash("sha256").update(payload).digest("hex");
 }
@@ -36,14 +35,16 @@ export function buildCanonicalString(input: {
   nonce: string;
   bodyHash: string;
 }): string {
-  return [
-    input.method.toUpperCase(),
-    input.url,
-    `hubId=${input.hubId}`,
-    `timestamp=${input.timestamp}`,
-    `nonce=${input.nonce}`,
-    `bodyhash=${input.bodyHash}`,
-  ].join("\n") + "\n";
+  return (
+    [
+      input.method.toUpperCase(),
+      input.url,
+      `hubId=${input.hubId}`,
+      `timestamp=${input.timestamp}`,
+      `nonce=${input.nonce}`,
+      `bodyhash=${input.bodyHash}`,
+    ].join("\n") + "\n"
+  );
 }
 
 declare module "fastify" {
