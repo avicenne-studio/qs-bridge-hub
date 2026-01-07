@@ -9,8 +9,19 @@ const tmpRoot = join(os.tmpdir(), "hub-sim");
 rmSync(tmpRoot, { recursive: true, force: true });
 mkdirSync(tmpRoot, { recursive: true });
 
+const DEFAULT_ORACLE_URLS =
+  process.env.SIM_ORACLE_URLS ??
+  "http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003";
+
+const FIXTURE_KEYS_FILE = resolve(
+  ROOT_DIR,
+  "test",
+  "fixtures",
+  "hub-keys.json"
+);
+
 const hubs = [
-  { id: "hub-1", port: 3010, role: "primary", up: false },
+  { id: "hub-1", port: 3010, role: "primary", up: true },
   { id: "hub-2", port: 3011, role: "fallback", up: true },
 ];
 
@@ -25,6 +36,8 @@ function startHub(hub) {
       ...process.env,
       PORT: String(hub.port),
       SQLITE_DB_FILE: dbFile,
+      ORACLE_URLS: DEFAULT_ORACLE_URLS,
+      HUB_KEYS_FILE: FIXTURE_KEYS_FILE,
     },
   });
 
