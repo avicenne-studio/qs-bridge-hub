@@ -7,4 +7,5 @@ const payload = {
   privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }),
 };
 
+// eslint-disable-next-line no-undef
 process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
