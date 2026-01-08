@@ -1,0 +1,12 @@
+{
+  "hubId": "primary",
+  "current": {
+    "kid": "current-1",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWRWu5e67npLDHhLZRVeePKmuBCz7aGnflyVclzIXra0=\n-----END PUBLIC KEY-----\n",
+    "privateKeyPem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAfsu1h74hvPK8U+ZO2jy4otNBOfkwBVkoS5Ihz6edlf\n-----END PRIVATE KEY-----\n"
+  },
+  "next": {
+    "kid": "next-1",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWRWu5e67npLDHhLZRVeePKmuBCz7aGnflyVclzIXra0=\n-----END PUBLIC KEY-----\n"
+  }
+}

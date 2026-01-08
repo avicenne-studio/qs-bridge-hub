@@ -120,11 +120,17 @@ function startHealthPolling(
   const poller = fastify.poller.create({
     servers: urls,
     fetchOne: async (server, signal) => {
+      const headers = fastify.hubSigner.signHeaders({
+        method: "GET",
+        url: "/api/health",
+      });
+
       try {
         const payload = await client.getJson<OracleHealthPayload>(
           server,
           "/api/health",
-          signal
+          signal,
+          headers
         );
         return {
           url: server,
@@ -172,11 +178,17 @@ function startOrdersPolling(
         return [];
       }
 
+      const headers = fastify.hubSigner.signHeaders({
+        method: "GET",
+        url: "/api/orders",
+      });
+
       try {
         const payload = await client.getJson<OracleOrdersResponse>(
           server,
           "/api/orders",
-          signal
+          signal,
+          headers
         );
         return normalizeOrdersPayload(payload);
       } catch (err) {
@@ -258,6 +270,7 @@ export default fp(
     dependencies: [
       "env",
       "polling",
+      "hub-signer",
       "undici-client",
       "orders-repository",
       "oracle-orders-reconciliation",

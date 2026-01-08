@@ -1,10 +1,12 @@
 import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import { groupOrdersById } from "../../../src/plugins/app/oracle-service.js";
 import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-service.js";
 import { FastifyInstance } from "fastify";
 import { waitFor } from "../../helpers/wait-for.js";
+import { buildCanonicalString } from "../../../src/plugins/infra/hub-signer.js";
 
 const ORACLE_URLS = [
   "http://127.0.0.1:6101",
@@ -40,6 +42,7 @@ function closeAll(servers: Server[]) {
 function createHealthServer(opts: {
   mode: "healthy" | "failing" | "slow";
   onHealthyRequest?: () => void;
+  onRequest?: (headers: Record<string, string | string[] | undefined>) => void;
   now?: () => string;
 }) {
   const { mode, onHealthyRequest, now } = opts;
@@ -49,6 +52,8 @@ function createHealthServer(opts: {
       res.writeHead(404).end();
       return;
     }
+
+    opts.onRequest?.(req.headers);
 
     if (mode === "slow") {
       return;
@@ -69,11 +74,20 @@ function createOrdersServer(opts: {
   handler: () => OracleOrderWithSignature[];
   responseMode?: ResponseMode;
   healthStatus?: "ok" | "down" | "slow";
+  onHealthRequest?: (headers: Record<string, string | string[] | undefined>) => void;
+  onOrdersRequest?: (headers: Record<string, string | string[] | undefined>) => void;
+  ordersStatusCode?: number;
 }) {
-  const { handler, responseMode = "data", healthStatus = "ok" } = opts;
+  const {
+    handler,
+    responseMode = "data",
+    healthStatus = "ok",
+    ordersStatusCode,
+  } = opts;
 
   return createServer(async (req, res) => {
     if (req.url === "/api/health") {
+      opts.onHealthRequest?.(req.headers);
       if (healthStatus === "slow") {
         return;
       }
@@ -89,6 +103,11 @@ function createOrdersServer(opts: {
     }
 
     if (req.url === "/api/orders" && req.method === "GET") {
+      opts.onOrdersRequest?.(req.headers);
+      if (ordersStatusCode && ordersStatusCode !== 200) {
+        res.writeHead(ordersStatusCode).end();
+        return;
+      }
       const payload = handler();
 
       res.writeHead(200, { "content-type": "application/json" });
@@ -117,6 +136,42 @@ function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
   for (const url of urls) {
     app.oracleService.update(url, { status: "ok", timestamp });
   }
+}
+
+function assertSignedHeaders(
+  t: TestContext,
+  headers: Record<string, string | string[] | undefined>,
+  opts: { url: string; hubId: string; keyId: string; publicKeyPem: string }
+) {
+  const hubId = headers["x-hub-id"] as string;
+  const keyId = headers["x-key-id"] as string;
+  const timestamp = headers["x-timestamp"] as string;
+  const nonce = headers["x-nonce"] as string;
+  const bodyHash = headers["x-body-hash"] as string;
+  const signature = headers["x-signature"] as string;
+
+  t.assert.strictEqual(hubId, opts.hubId);
+  t.assert.strictEqual(keyId, opts.keyId);
+
+  const canonical = buildCanonicalString({
+    method: "GET",
+    url: opts.url,
+    hubId,
+    timestamp,
+    nonce,
+    bodyHash,
+  });
+
+  const expectedBodyHash = createHash("sha256").update("").digest("hex");
+  t.assert.strictEqual(bodyHash, expectedBodyHash);
+
+  const ok = verify(
+    null,
+    Buffer.from(canonical),
+    createPublicKey(opts.publicKeyPem),
+    Buffer.from(signature, "base64")
+  );
+  t.assert.ok(ok, "signature should verify");
 }
 
 async function withApp(t: TestContext) {
@@ -171,19 +226,23 @@ describe("oracle service", () => {
       t.assert.strictEqual(grouped[1][0].id, 2);
     });
 
-    test("polls remote health endpoints", async (t: TestContext) => {
-      const [healthyUrl, failingUrl, slowUrl] = ORACLE_URLS;
+  test("polls remote health endpoints", async (t: TestContext) => {
+    const [healthyUrl, failingUrl, slowUrl] = ORACLE_URLS;
 
-      let healthyRequests = 0;
-      const start = Date.now();
+    let healthyRequests = 0;
+    const healthyHeaders: Record<string, string | string[] | undefined>[] = [];
+    const start = Date.now();
 
-      const healthyServer = createHealthServer({
-        mode: "healthy",
-        onHealthyRequest: () => {
-          healthyRequests += 1;
-        },
-        now: () => new Date(start + healthyRequests * 1_000).toISOString(),
-      });
+    const healthyServer = createHealthServer({
+      mode: "healthy",
+      onHealthyRequest: () => {
+        healthyRequests += 1;
+      },
+      onRequest: (headers) => {
+        healthyHeaders.push(headers);
+      },
+      now: () => new Date(start + healthyRequests * 1_000).toISOString(),
+    });
 
       const failingServer = createHealthServer({ mode: "failing" });
       const slowServer = createHealthServer({ mode: "slow" });
@@ -225,14 +284,29 @@ describe("oracle service", () => {
         "down"
       );
 
-      await waitFor(async () => {
-        const next = getOracleEntry(app, healthyUrl);
-        return healthyRequests >= 2 && next !== undefined;
-      });
-
-      t.assert.ok(healthyRequests >= 2, "expected at least two polls to occur");
+    await waitFor(async () => {
+      const next = getOracleEntry(app, healthyUrl);
+      return healthyRequests >= 2 && next !== undefined;
     });
+
+    t.assert.ok(healthyRequests >= 2, "expected at least two polls to occur");
+    t.assert.ok(healthyHeaders.length >= 1, "expected signed headers");
+
+    assertSignedHeaders(t, healthyHeaders[0], {
+      url: "/api/health",
+      hubId: app.hubKeys.hubId,
+      keyId: app.hubKeys.current.kid,
+      publicKeyPem: app.hubKeys.current.publicKeyPem,
+    });
+
+    if (healthyHeaders.length >= 2) {
+      t.assert.notStrictEqual(
+        healthyHeaders[0]["x-nonce"],
+        healthyHeaders[1]["x-nonce"]
+      );
+    }
   });
+});
 
   describe("poll orders", () => {
     function serverOrderFactory(
@@ -255,6 +329,10 @@ describe("oracle service", () => {
           "ok" | "down" | "slow",
           "ok" | "down" | "slow"
         ];
+        ordersStatusCodes?: [number?, number?, number?];
+        onOrdersRequests?: Array<
+          (headers: Record<string, string | string[] | undefined>) => void
+        >;
       }
     ) {
       const {
@@ -262,6 +340,8 @@ describe("oracle service", () => {
         responseModes = ["data", "data", "data"],
         orderIds = [1],
         healthStatuses = ["ok", "ok", "ok"],
+        ordersStatusCodes = [],
+        onOrdersRequests = [],
       } = opts;
 
       const servers = [
@@ -269,16 +349,22 @@ describe("oracle service", () => {
           handler: () => orderIds.map(builders[0]),
           responseMode: responseModes[0],
           healthStatus: healthStatuses[0],
+          ordersStatusCode: ordersStatusCodes[0],
+          onOrdersRequest: onOrdersRequests[0],
         }),
         createOrdersServer({
           handler: () => orderIds.map(builders[1]),
           responseMode: responseModes[1],
           healthStatus: healthStatuses[1],
+          ordersStatusCode: ordersStatusCodes[1],
+          onOrdersRequest: onOrdersRequests[1],
         }),
         createOrdersServer({
           handler: () => orderIds.map(builders[2]),
           responseMode: responseModes[2],
           healthStatus: healthStatuses[2],
+          ordersStatusCode: ordersStatusCodes[2],
+          onOrdersRequest: onOrdersRequests[2],
         }),
       ];
 
@@ -330,6 +416,33 @@ describe("oracle service", () => {
       t.assert.strictEqual(withSignatures[0].signatures.length, 3);
     });
 
+    test("logs when oracle orders polling fails", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        orderIds: [111],
+        ordersStatusCodes: [503, 200, 200],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) => call.arguments[1] === "oracle orders poll failed"
+        )
+      );
+
+      await handle.stop();
+    });
+
     test("skips unhealthy oracles when polling orders", async (t: TestContext) => {
       let downCalls = 0;
 
@@ -375,6 +488,41 @@ describe("oracle service", () => {
       ]);
       t.assert.strictEqual(withSignatures[0].signatures.length, 2);
       t.assert.strictEqual(downCalls, 0);
+    });
+
+    test("signs oracle orders requests", async (t: TestContext) => {
+      const ordersHeaders: Record<string, string | string[] | undefined>[] = [];
+
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        orderIds: [999],
+        responseModes: ["data", "data", "data"],
+        healthStatuses: ["ok", "ok", "ok"],
+        onOrdersRequests: [
+          (headers) => ordersHeaders.push(headers),
+        ],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() => ordersHeaders.length >= 1, 10_000);
+
+      assertSignedHeaders(t, ordersHeaders[0], {
+        url: "/api/orders",
+        hubId: app.hubKeys.hubId,
+        keyId: app.hubKeys.current.kid,
+        publicKeyPem: app.hubKeys.current.publicKeyPem,
+      });
+
+      await handle.stop();
     });
 
     test("logs when reconciliation fails for mismatched orders", async (t: TestContext) => {

@@ -7,6 +7,8 @@
 
 ## Architecture
 - **Plugin-driven Fastify app (`src/app.ts`)** – infra plugins (`src/plugins/infra`) run first to install cross-cutting concerns (env validation, helmet, cors, rate limits, sensible defaults, connectivity helpers like SQLite/Knex, the polling helper, and the Undici HTTP client). Application plugins (`src/plugins/app`) then register domain capabilities (shared schemas plus the indexer domain).
+- **Hub signing keys (`src/plugins/infra/hub-keys.ts`)** – reads `HUB_KEYS_FILE` (JSON on disk) at startup, validates it with TypeBox, and decorates Fastify with `fastify.hubKeys` plus a public-only `fastify.hubPublicKeys` projection (SHA-256 fingerprints of PEM strings).
+- **Hub signer (`src/plugins/infra/hub-signer.ts`)** – exposes `fastify.hubSigner.signHeaders(...)` which builds the canonical request string, computes the body hash, and signs with Ed25519 using the current private key; used by the oracle polling flows to attach `X-Hub-*` headers.
 - **Generic polling helper (`src/plugins/infra/poller.ts`)** – decorates Fastify with `fastify.poller`, a minimal poller factory that accepts a dependency-injected `fetcher(server, signal)` and an `onRound` callback. Each round awaits an optional jitter, runs requests concurrently via `Promise.allSettled` (so a single failure does not reject the entire round like `Promise.all` would), enforces per-request `AbortController` timeouts, and forwards only fulfilled typed responses along with round metadata. Recommended defaults live in `fastify.poller.defaults` (`intervalMs=1000`, `requestTimeoutMs=700`, `jitterMs=25`), and the file documents a concise usage example.
 - **Undici JSON client (`src/plugins/infra/undici-get-client.ts`)** – provides `fastify.undiciGetClient` for building reusable GET-only clients backed by per-origin `undici` Pools. Supports configurable connection counts, pipelining, keep-alive/connect timeouts, optional default headers, AbortSignal propagation, JSON parsing, and auto-closes created clients on Fastify shutdown. Defaults are tuned for polling workloads (connections=1, pipelining=1, keepAliveTimeout=10s, keepAliveMaxTimeout=60s, connectTimeout=5s).
 - **Oracle service (`src/plugins/app/oracle-service.ts`)** – parses the required `ORACLE_URLS` (comma-separated HTTP(S) URLs) and tracks `{status,timestamp}` for each oracle inside an in-memory registry exposed as `fastify.oracleService`. It also polls each oracle's `/api/health` endpoint via the shared poller + Undici client to keep health data fresh, and marks oracles as `down` whenever HTTP failures/timeouts occur so problems surface in `/api/health/oracles`.
@@ -17,6 +19,7 @@
 - **Routes (`src/routes`)** – home route returns a welcome banner; `/api` namespace holds resource-specific routers.
   - `src/routes/api/orders/index.ts` provides `GET /api/orders` for paginated listing with optional `source/dest` filters plus a placeholder `GET /api/orders/signatures` that currently returns fixtures until oracle-to-hub signature exchange lands. Responses include pagination metadata; all parameters/responses are validated through TypeBox schemas.
   - `src/routes/api/health/index.ts` exposes lightweight health probes: `GET /api/health/bridge` currently reports `{paused:true}` for the bridge, and `GET /api/health/oracles` streams whatever `fastify.oracleService.list()` reports so oracle URLs/states are sourced exclusively from `ORACLE_URLS`.
+  - `src/routes/api/keys/index.ts` exposes `GET /api/keys`, returning only public key material plus SHA-256 fingerprints for operator verification.
 - **Process lifecycle (`src/server.ts`)** – builds a Fastify instance with smart logging defaults, registers the app via `fastify-plugin` (so decorators leak to encapsulated scopes), and closes gracefully via `close-with-grace`.
 
 ## Database
@@ -42,6 +45,7 @@
 - Install deps (`npm install`), allow the `better-sqlite3` build (`npx allow-scripts run`), then run `npm run dev` (uses `tsx` with `.env.local`).
 - Production build is `npm run build` followed by `npm start` (runs `dist/server.js`). Docker compose files (`docker-compose.yml` and `.prod`) wrap the same commands with the right env defaults.
 - Configuration is `.env`-driven; `ORACLE_URLS` (comma-separated HTTP(S) URLs) controls which oracle URLs are tracked and exposed by the oracle service and health endpoints.
+- `HUB_KEYS_FILE` points to the on-disk JSON keys file used for Hub→Oracle request signing and the `/api/keys` public key endpoint.
 
 ## Web3 / Oracle Context
 - Each oracle (Fastify service) submits Solana/Qubic transaction data to the hub. The hub:

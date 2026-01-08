@@ -1,0 +1,7 @@
+{
+  "hubId": "primary",
+  "current": {
+    "kid": "current-1",
+    "publicKeyPem": "missing-private"
+  }
+}
