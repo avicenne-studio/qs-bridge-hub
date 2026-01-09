@@ -9,7 +9,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "A",
     to: "B",
     amount: 10,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await app.ordersRepository.create({
@@ -19,7 +19,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     from: "C",
     to: "D",
     amount: 25,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "finalized",
   });
 }
@@ -45,7 +45,7 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].from, "A");
   t.assert.strictEqual(body.data[0].dest, "qubic");
   t.assert.strictEqual(body.data[0].status, "in-progress");
-  t.assert.strictEqual(body.data[0].is_relayable, false);
+  t.assert.strictEqual(body.data[0].oracle_accept_to_relay, false);
 });
 
 test("GET /api/orders/signatures returns stored signatures", async (t: TestContext) => {
@@ -58,8 +58,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     from: "A",
     to: "B",
     amount: 10,
-    is_relayable: false,
-    status: "pending",
+    oracle_accept_to_relay: true,
+    status: "ready-for-relay",
   });
   const second = await app.ordersRepository.create({
     id: 502,
@@ -68,7 +68,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     from: "C",
     to: "D",
     amount: 20,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await app.ordersRepository.create({
@@ -78,7 +78,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     from: "E",
     to: "F",
     amount: 30,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "finalized",
   });
 
@@ -92,7 +92,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.data.length, 1);
 
   const byId = new Map(
     body.data.map((order: { orderId: number; signatures: string[] }) => [
@@ -102,7 +102,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
   );
 
   t.assert.deepStrictEqual(byId.get(first!.id), ["sigA", "sigB"]);
-  t.assert.deepStrictEqual(byId.get(second!.id), ["sigC"]);
+  t.assert.deepStrictEqual(byId.get(second!.id), undefined);
 });
 
 test("GET /api/orders handles repository errors", async (t: TestContext) => {

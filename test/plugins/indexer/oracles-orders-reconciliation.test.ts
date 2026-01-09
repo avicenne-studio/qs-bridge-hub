@@ -9,7 +9,7 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   from: "A",
   to: "B",
   amount: 10,
-  is_relayable: false,
+  oracle_accept_to_relay: false,
 };
 
 describe("oracleOrdersReconciliatior plugin", () => {
@@ -47,7 +47,7 @@ describe("oracleOrdersReconciliatior plugin", () => {
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
-      { ...baseOrder, is_relayable: true, status: "finalized" },
+      { ...baseOrder, oracle_accept_to_relay: true, status: "finalized" },
     ];
 
     t.assert.throws(() =>

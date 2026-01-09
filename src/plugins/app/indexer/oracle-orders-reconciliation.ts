@@ -29,7 +29,7 @@ function ensureIdenticalOrders(orders: OracleOrder[]) {
       order.from !== first.from ||
       order.to !== first.to ||
       order.amount !== first.amount ||
-      order.is_relayable !== first.is_relayable
+      order.oracle_accept_to_relay !== first.oracle_accept_to_relay
     ) {
       throw new Error("Orders to reconcile must be identical");
     }

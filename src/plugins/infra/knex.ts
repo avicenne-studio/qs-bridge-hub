@@ -44,7 +44,7 @@ export default fp(
           table.string("from").notNullable();
           table.string("to").notNullable();
           table.float("amount").notNullable();
-          table.boolean("is_relayable").notNullable().defaultTo(false);
+          table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
       }
