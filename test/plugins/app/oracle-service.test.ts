@@ -25,7 +25,7 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     from: "A",
     to: "B",
     amount: 10,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
   } satisfies OracleOrderWithSignature;
@@ -393,7 +393,7 @@ describe("oracle service", () => {
         from: "A",
         to: "B",
         amount: 10,
-        is_relayable: false,
+        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -414,6 +414,92 @@ describe("oracle service", () => {
         created!.id,
       ]);
       t.assert.strictEqual(withSignatures[0].signatures.length, 3);
+    });
+
+    test("marks orders ready-for-relay when signature threshold is met", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending"),
+          serverOrderFactory("sig-2", "pending"),
+          serverOrderFactory("sig-3", "pending"),
+        ],
+        responseModes: ["data", "data", "array"],
+        orderIds: [151],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const created = await app.ordersRepository.create({
+        id: 151,
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: 10,
+        oracle_accept_to_relay: false,
+        status: "pending",
+      });
+
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await app.ordersRepository.findById(created!.id);
+        return updated?.status === "ready-for-relay";
+      }, 10_000);
+
+      await handle.stop();
+
+      const updated = await app.ordersRepository.findById(created!.id);
+      t.assert.strictEqual(updated?.status, "ready-for-relay");
+      t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
+    });
+
+    test("keeps orders pending when signature threshold is not met", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending"),
+          serverOrderFactory("sig-2", "pending"),
+          serverOrderFactory("sig-3", "pending"),
+        ],
+        orderIds: [161],
+        healthStatuses: ["ok", "down", "down"],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, [ORACLE_URLS[0]]);
+
+      const created = await app.ordersRepository.create({
+        id: 161,
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: 10,
+        oracle_accept_to_relay: false,
+        status: "pending",
+      });
+
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const withSignatures =
+          await app.ordersRepository.findByIdsWithSignatures([created!.id]);
+        return withSignatures[0]?.signatures.length === 1;
+      }, 10_000);
+
+      await handle.stop();
+
+      const updated = await app.ordersRepository.findById(created!.id);
+      t.assert.strictEqual(updated?.status, "pending");
+      t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
+
+      const withSignatures = await app.ordersRepository.findByIdsWithSignatures([
+        created!.id,
+      ]);
+      t.assert.strictEqual(withSignatures[0].signatures.length, 1);
     });
 
     test("logs when oracle orders polling fails", async (t: TestContext) => {
@@ -469,7 +555,7 @@ describe("oracle service", () => {
         from: "A",
         to: "B",
         amount: 10,
-        is_relayable: false,
+        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -544,7 +630,7 @@ describe("oracle service", () => {
         from: "A",
         to: "B",
         amount: 10,
-        is_relayable: false,
+        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -582,7 +668,7 @@ describe("oracle service", () => {
         from: "A",
         to: "B",
         amount: 10,
-        is_relayable: false,
+        oracle_accept_to_relay: false,
         status: "pending",
       });
 

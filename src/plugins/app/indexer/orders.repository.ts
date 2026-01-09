@@ -36,7 +36,7 @@ type OrderWithTotal = StoredOrder & { total: number };
 function normalizeStoredOrder(row: StoredOrder): StoredOrder {
   return {
     ...row,
-    is_relayable: Boolean(row.is_relayable),
+    oracle_accept_to_relay: Boolean(row.oracle_accept_to_relay),
   };
 }
 
@@ -48,7 +48,7 @@ function createRepository(fastify: FastifyInstance) {
       const offset = (q.page - 1) * q.limit;
 
       const query = knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
         .select(knex.raw("count(*) OVER() as total"));
 
       if (q.source !== undefined) {
@@ -78,7 +78,7 @@ function createRepository(fastify: FastifyInstance) {
 
     async findById(id: number) {
       const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
         .where("id", id)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
@@ -110,7 +110,7 @@ function createRepository(fastify: FastifyInstance) {
     },
 
     async findActivesIds(limit = 100) {
-      const rows = await knex<{ id: number }>(ORDERS_TABLE_NAME)
+      const rows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
         .select("id")
         .whereIn("status", ["pending", "in-progress"])
         .orderBy("id", "asc")
@@ -119,32 +119,40 @@ function createRepository(fastify: FastifyInstance) {
       return rows.map((row) => Number(row.id));
     },
 
+    async findRelayableIds(limit = 100) {
+      const rows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+        .select("id")
+        .where({ status: "ready-for-relay" })
+        .orderBy("id", "asc")
+        .limit(limit);
+
+      return rows.map((row) => Number(row.id));
+    },
+
     async addSignatures(orderId: number, signatures: string[]) {
       const unique = [...new Set(signatures)];
-      if (unique.length === 0) {
-        return [];
-      }
-
       const existing = await knex<PersistedSignature>(ORDER_SIGNATURES_TABLE_NAME)
         .select("signature")
-        .where({ order_id: orderId })
-        .whereIn("signature", unique);
-
+        .where({ order_id: orderId });
       const existingSet = new Set(existing.map((row) => row.signature));
       const toInsert = unique.filter((signature) => !existingSet.has(signature));
 
-      if (toInsert.length === 0) {
-        return [];
+      if (toInsert.length > 0) {
+        await knex<PersistedSignature>(ORDER_SIGNATURES_TABLE_NAME)
+          .insert(
+            toInsert.map((signature) => ({
+              order_id: orderId,
+              signature,
+            }))
+          )
+          .onConflict(["order_id", "signature"])
+          .ignore();
       }
 
-      await knex<PersistedSignature>(ORDER_SIGNATURES_TABLE_NAME).insert(
-        toInsert.map((signature) => ({
-          order_id: orderId,
-          signature,
-        }))
-      );
-
-      return toInsert;
+      return {
+        added: toInsert.length,
+        total: existingSet.size + toInsert.length,
+      };
     },
 
     async findByIdsWithSignatures(ids: number[]): Promise<OrderWithSignatures[]> {
@@ -153,7 +161,7 @@ function createRepository(fastify: FastifyInstance) {
       }
 
       const orders = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "is_relayable", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
         .whereIn("id", ids)
         .orderBy("id", "asc");
 

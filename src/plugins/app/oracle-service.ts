@@ -169,6 +169,10 @@ function startOrdersPolling(
 ): PollerHandle {
   const client = fastify.undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
+  const signatureThreshold = Math.max(
+    1,
+    Math.floor(fastify.config.ORACLE_SIGNATURE_THRESHOLD)
+  );
 
   const poller = fastify.poller.create<OracleOrderWithSignature[]>({
     servers: urls,
@@ -218,9 +222,26 @@ function startOrdersPolling(
           const consensus =
             fastify.oracleOrdersReconciliatior.reconcile(reconciledOrders);
 
+          const existing = await fastify.ordersRepository.findById(orderId);
+          if (!existing) {
+            fastify.log.warn(
+              { orderId },
+              "oracle orders poll skipped missing order"
+            );
+            continue;
+          }
+
+          const signatureCounts =
+            await fastify.ordersRepository.addSignatures(orderId, signatures);
+          const canBeRelayable = consensus.status !== "finalized";
+          const meetsThreshold = signatureCounts.total >= signatureThreshold;
+          const nextStatus =
+            meetsThreshold && canBeRelayable
+              ? "ready-for-relay"
+              : consensus.status;
+
           const updated = await fastify.ordersRepository.update(orderId, {
-            status: consensus.status,
-            is_relayable: consensus.is_relayable,
+            status: nextStatus,
           });
 
           if (!updated) {
@@ -230,8 +251,6 @@ function startOrdersPolling(
             );
             continue;
           }
-
-          await fastify.ordersRepository.addSignatures(orderId, signatures);
         } catch (err) {
           fastify.log.warn(
             { err, orderId },

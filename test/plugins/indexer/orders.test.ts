@@ -37,7 +37,7 @@ describe("OracleOrder utilities", () => {
       from: "A",
       to: "B",
       amount: 10,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     };
 
@@ -51,7 +51,7 @@ describe("OracleOrder utilities", () => {
       from: "A",
       to: "B",
       amount: 1,
-      is_relayable: true,
+      oracle_accept_to_relay: true,
       status: "finalized",
     };
 
@@ -69,7 +69,7 @@ describe("OracleOrder utilities", () => {
     t.assert.strictEqual(order.from, mockQubicTx.sender);
     t.assert.strictEqual(order.to, mockQubicTx.recipient);
     t.assert.strictEqual(order.amount, mockQubicTx.amount);
-    t.assert.strictEqual(order.is_relayable, false);
+    t.assert.strictEqual(order.oracle_accept_to_relay, false);
     t.assert.strictEqual(order.status, "in-progress");
   });
 

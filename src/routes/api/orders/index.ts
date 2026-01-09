@@ -94,12 +94,19 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      const ids = await fastify.ordersRepository.findActivesIds();
+      const threshold = Math.max(
+        1,
+        Math.floor(fastify.config.ORACLE_SIGNATURE_THRESHOLD)
+      );
+      const ids = await fastify.ordersRepository.findRelayableIds();
       const orders = await fastify.ordersRepository.findByIdsWithSignatures(ids);
 
       return {
         data: orders
-          .filter((order) => order.signatures.length > 0)
+          .filter(
+            (order) =>
+              order.signatures.length >= threshold
+          )
           .map((order) => ({
             orderId: order.id,
             signatures: order.signatures.map((signature) => signature.signature),

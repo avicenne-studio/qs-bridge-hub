@@ -13,7 +13,7 @@ describe("ordersRepository", () => {
       from: "Alice",
       to: "Bob",
       amount: 123,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -24,7 +24,7 @@ describe("ordersRepository", () => {
     t.assert.strictEqual(created?.from, "Alice");
     t.assert.strictEqual(created?.to, "Bob");
     t.assert.strictEqual(created?.amount, 123);
-    t.assert.strictEqual(created?.is_relayable, false);
+    t.assert.strictEqual(created?.oracle_accept_to_relay, false);
     t.assert.strictEqual(created?.status, "in-progress");
 
     const fetched = await repo.findById(created!.id);
@@ -51,7 +51,7 @@ describe("ordersRepository", () => {
       from: "A",
       to: "B",
       amount: 10,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -61,7 +61,7 @@ describe("ordersRepository", () => {
       from: "C",
       to: "D",
       amount: 20,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "finalized",
     });
     await repo.create({
@@ -71,7 +71,7 @@ describe("ordersRepository", () => {
       from: "E",
       to: "F",
       amount: 30,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -107,7 +107,7 @@ describe("ordersRepository", () => {
       from: "X",
       to: "Y",
       amount: 1,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -117,7 +117,7 @@ describe("ordersRepository", () => {
       from: "Z",
       to: "T",
       amount: 2,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "finalized",
     });
 
@@ -155,7 +155,7 @@ describe("ordersRepository", () => {
       from: "A",
       to: "B",
       amount: 50,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -195,7 +195,7 @@ describe("ordersRepository", () => {
       from: "DeleteA",
       to: "DeleteB",
       amount: 7,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "finalized",
     });
 
@@ -244,21 +244,21 @@ describe("ordersRepository", () => {
       from: "SigA",
       to: "SigB",
       amount: 5,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
     const firstInsert = await repo.addSignatures(created!.id, ["sigA", "sigB"]);
-    t.assert.deepStrictEqual(firstInsert, ["sigA", "sigB"]);
+    t.assert.deepStrictEqual(firstInsert, { added: 2, total: 2 });
 
     const skipped = await repo.addSignatures(created!.id, []);
-    t.assert.deepStrictEqual(skipped, []);
+    t.assert.deepStrictEqual(skipped, { added: 0, total: 2 });
 
     const secondInsert = await repo.addSignatures(created!.id, ["sigA", "sigC"]);
-    t.assert.deepStrictEqual(secondInsert, ["sigC"]);
+    t.assert.deepStrictEqual(secondInsert, { added: 1, total: 3 });
 
     const duplicatesOnly = await repo.addSignatures(created!.id, ["sigA"]);
-    t.assert.deepStrictEqual(duplicatesOnly, []);
+    t.assert.deepStrictEqual(duplicatesOnly, { added: 0, total: 3 });
 
     const orders = await repo.findByIdsWithSignatures([created!.id]);
     t.assert.strictEqual(orders.length, 1);
@@ -277,7 +277,7 @@ describe("ordersRepository", () => {
       from: "NoSigA",
       to: "NoSigB",
       amount: 9,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -297,7 +297,7 @@ describe("ordersRepository", () => {
       from: "P",
       to: "Q",
       amount: 1,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "pending",
     });
     const inProgress = await repo.create({
@@ -307,7 +307,7 @@ describe("ordersRepository", () => {
       from: "R",
       to: "S",
       amount: 2,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -317,7 +317,7 @@ describe("ordersRepository", () => {
       from: "T",
       to: "U",
       amount: 3,
-      is_relayable: false,
+      oracle_accept_to_relay: false,
       status: "ready-for-relay",
     });
 

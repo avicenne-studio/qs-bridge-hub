@@ -14,6 +14,7 @@ test("rejects invalid ORACLE_URLS entries", async (t: TestContext) => {
       RATE_LIMIT_MAX: 100,
       SQLITE_DB_FILE: ":memory:",
       ORACLE_URLS: "https://ok.example,ftp://bad.example",
+      ORACLE_SIGNATURE_THRESHOLD: 2,
       HUB_KEYS_FILE: "./test/fixtures/hub-keys.json",
     },
   });

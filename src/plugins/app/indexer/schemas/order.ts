@@ -21,7 +21,7 @@ export const OracleOrderSchema = Type.Object({
   from: StringSchema,
   to: StringSchema,
   amount: Type.Number(),
-  is_relayable: Type.Boolean(),
+  oracle_accept_to_relay: Type.Boolean(),
   status: OracleOrderStatus,
 });
 
@@ -44,7 +44,7 @@ export function orderFromQubic(
     from: tx.sender,
     to: tx.recipient,
     amount: tx.amount,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "in-progress",
   };
   assertValidOracleOrder(order);
@@ -63,7 +63,7 @@ export function orderFromSolana(
     from: decoded.from,
     to: decoded.to,
     amount: decoded.amount,
-    is_relayable: false,
+    oracle_accept_to_relay: false,
     status: "in-progress",
   };
   assertValidOracleOrder(order);
