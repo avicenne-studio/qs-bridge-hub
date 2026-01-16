@@ -1,29 +1,41 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
+import { kKnex, type KnexAccessor } from "../../infra/knex.js";
 
 import { OracleOrder } from "./schemas/order.js";
 
 export const ORDERS_TABLE_NAME = "orders";
 export const ORDER_SIGNATURES_TABLE_NAME = "order_signatures";
 
-declare module "fastify" {
-  interface FastifyInstance {
-    ordersRepository: ReturnType<typeof createRepository>;
-  }
+export interface OrdersRepository {
+  paginate(q: OrderQuery): Promise<{ orders: StoredOrder[]; total: number }>;
+  findById(id: number): Promise<StoredOrder | null>;
+  create(newOrder: StoredOrder): Promise<StoredOrder | null>;
+  update(id: number, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
+  delete(id: number): Promise<boolean>;
+  findActivesIds(limit?: number): Promise<number[]>;
+  findRelayableIds(limit?: number): Promise<number[]>;
+  addSignatures(
+    orderId: number,
+    signatures: string[]
+  ): Promise<{ added: number; total: number }>;
+  findByIdsWithSignatures(ids: number[]): Promise<OrderWithSignatures[]>;
 }
 
+export const kOrdersRepository = Symbol("app.ordersRepository");
+
 type PersistedOrder = OracleOrder & { id: number };
-type StoredOrder = PersistedOrder;
-type CreateOrder = PersistedOrder;
+export type StoredOrder = OracleOrder & { id: number };
+type CreateOrder = StoredOrder;
 type UpdateOrder = Partial<OracleOrder>;
 type PersistedSignature = {
   order_id: number;
   signature: string;
 };
-type StoredSignature = PersistedSignature & { id: number };
-type OrderWithSignatures = StoredOrder & { signatures: StoredSignature[] };
+export type StoredSignature = PersistedSignature & { id: number };
+export type OrderWithSignatures = StoredOrder & { signatures: StoredSignature[] };
 
-type OrderQuery = {
+export type OrderQuery = {
   page: number;
   limit: number;
   order: "asc" | "desc";
@@ -40,8 +52,8 @@ function normalizeStoredOrder(row: StoredOrder): StoredOrder {
   };
 }
 
-function createRepository(fastify: FastifyInstance) {
-  const knex = fastify.knex;
+function createRepository(fastify: FastifyInstance): OrdersRepository {
+  const knex = fastify.getDecorator<KnexAccessor>(kKnex).get();
 
   return {
     async paginate(q: OrderQuery) {
@@ -194,7 +206,7 @@ function createRepository(fastify: FastifyInstance) {
 
 export default fp(
   function (fastify) {
-    fastify.decorate("ordersRepository", createRepository(fastify));
+    fastify.decorate(kOrdersRepository, createRepository(fastify));
   },
   {
     name: "orders-repository",

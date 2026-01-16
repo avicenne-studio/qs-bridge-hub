@@ -7,6 +7,10 @@ import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-s
 import { FastifyInstance } from "fastify";
 import { waitFor } from "../../helpers/wait-for.js";
 import { buildCanonicalString } from "../../../src/plugins/infra/hub-signer.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "../../../src/plugins/app/indexer/orders.repository.js";
 
 const ORACLE_URLS = [
   "http://127.0.0.1:6101",
@@ -129,6 +133,10 @@ function createOrdersServer(opts: {
 
 function getOracleEntry(app: FastifyInstance, url: string) {
   return app.oracleService.list().find((e) => e.url === url);
+}
+
+function getOrdersRepository(app: FastifyInstance) {
+  return app.getDecorator<OrdersRepository>(kOrdersRepository);
 }
 
 function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
@@ -384,9 +392,10 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const created = await app.ordersRepository.create({
+      const created = await ordersRepository.create({
         id: 101,
         source: "solana",
         dest: "qubic",
@@ -401,16 +410,16 @@ describe("oracle service", () => {
       t.after(() => handle.stop());
 
       await waitFor(async () => {
-        const updated = await app.ordersRepository.findById(created!.id);
+        const updated = await ordersRepository.findById(created!.id);
         return updated?.status === "finalized";
       }, 10_000);
 
       await handle.stop();
 
-      const updated = await app.ordersRepository.findById(created!.id);
+      const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "finalized");
 
-      const withSignatures = await app.ordersRepository.findByIdsWithSignatures([
+      const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
       ]);
       t.assert.strictEqual(withSignatures[0].signatures.length, 3);
@@ -428,9 +437,10 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const created = await app.ordersRepository.create({
+      const created = await ordersRepository.create({
         id: 151,
         source: "solana",
         dest: "qubic",
@@ -445,13 +455,13 @@ describe("oracle service", () => {
       t.after(() => handle.stop());
 
       await waitFor(async () => {
-        const updated = await app.ordersRepository.findById(created!.id);
+        const updated = await ordersRepository.findById(created!.id);
         return updated?.status === "ready-for-relay";
       }, 10_000);
 
       await handle.stop();
 
-      const updated = await app.ordersRepository.findById(created!.id);
+      const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "ready-for-relay");
       t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
     });
@@ -468,9 +478,10 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, [ORACLE_URLS[0]]);
 
-      const created = await app.ordersRepository.create({
+      const created = await ordersRepository.create({
         id: 161,
         source: "solana",
         dest: "qubic",
@@ -486,17 +497,17 @@ describe("oracle service", () => {
 
       await waitFor(async () => {
         const withSignatures =
-          await app.ordersRepository.findByIdsWithSignatures([created!.id]);
+          await ordersRepository.findByIdsWithSignatures([created!.id]);
         return withSignatures[0]?.signatures.length === 1;
       }, 10_000);
 
       await handle.stop();
 
-      const updated = await app.ordersRepository.findById(created!.id);
+      const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "pending");
       t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
 
-      const withSignatures = await app.ordersRepository.findByIdsWithSignatures([
+      const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
       ]);
       t.assert.strictEqual(withSignatures[0].signatures.length, 1);
@@ -546,9 +557,10 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, [ORACLE_URLS[0], ORACLE_URLS[1]]); // Don't set the third healthy
 
-      const created = await app.ordersRepository.create({
+      const created = await ordersRepository.create({
         id: 1,
         source: "solana",
         dest: "qubic",
@@ -563,13 +575,13 @@ describe("oracle service", () => {
       t.after(() => handle.stop());
 
       await waitFor(async () => {
-        const updated = await app.ordersRepository.findById(created!.id);
+        const updated = await ordersRepository.findById(created!.id);
         return updated?.status === "finalized";
       }, 10_000);
 
       await handle.stop();
 
-      const withSignatures = await app.ordersRepository.findByIdsWithSignatures([
+      const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
       ]);
       t.assert.strictEqual(withSignatures[0].signatures.length, 2);
@@ -622,8 +634,9 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
-      await app.ordersRepository.create({
+      await ordersRepository.create({
         id: 201,
         source: "solana",
         dest: "qubic",
@@ -660,8 +673,9 @@ describe("oracle service", () => {
       });
 
       const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
-      const created = await app.ordersRepository.create({
+      const created = await ordersRepository.create({
         id: 301,
         source: "solana",
         dest: "qubic",
@@ -672,7 +686,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const { mock: updateMock } = t.mock.method(app.ordersRepository, "update");
+      const { mock: updateMock } = t.mock.method(ordersRepository, "update");
       updateMock.mockImplementation(async () => null);
 
       const { mock: warnMock } = t.mock.method(app.log, "warn");
@@ -688,7 +702,7 @@ describe("oracle service", () => {
 
       await handle.stop();
 
-      const fetched = await app.ordersRepository.findById(created!.id);
+      const fetched = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(fetched?.status, "pending");
     });
   });
