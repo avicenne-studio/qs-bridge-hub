@@ -1,10 +1,14 @@
 import { it, describe, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "../../../src/plugins/app/indexer/orders.repository.js";
 
 describe("ordersRepository", () => {
   it("should create and retrieve an order by id", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
       id: 101,
@@ -33,7 +37,7 @@ describe("ordersRepository", () => {
 
   it("should paginate orders", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
     const empty = await repo.paginate({
       page: 1,
       limit: 2,
@@ -98,7 +102,7 @@ describe("ordersRepository", () => {
 
   it("should filter by source or dest", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     await repo.create({
       id: 11,
@@ -146,7 +150,7 @@ describe("ordersRepository", () => {
 
   it("should update an order", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
       id: 44,
@@ -177,7 +181,7 @@ describe("ordersRepository", () => {
     "should return null when updating a non-existent order",
     async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const updated = await repo.update(9999, { amount: 100 });
       t.assert.strictEqual(updated, null);
@@ -186,7 +190,7 @@ describe("ordersRepository", () => {
 
   it("should delete an order", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
       id: 55,
@@ -210,7 +214,7 @@ describe("ordersRepository", () => {
     "should return false when deleting a non-existent order",
     async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const removed = await repo.delete(9999);
       t.assert.strictEqual(removed, false);
@@ -219,7 +223,7 @@ describe("ordersRepository", () => {
 
   it("should return empty list when fetching signatures without orders", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const orders = await repo.findByIdsWithSignatures([]);
     t.assert.deepStrictEqual(orders, []);
@@ -227,7 +231,7 @@ describe("ordersRepository", () => {
 
   it("should return empty list when ids do not exist", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const orders = await repo.findByIdsWithSignatures([123]);
     t.assert.deepStrictEqual(orders, []);
@@ -235,7 +239,7 @@ describe("ordersRepository", () => {
 
   it("should add signatures without duplicates", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
       id: 77,
@@ -268,7 +272,7 @@ describe("ordersRepository", () => {
 
   it("should return empty signatures for orders without signatures", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
       id: 78,
@@ -288,7 +292,7 @@ describe("ordersRepository", () => {
 
   it("should return active ids with limit", async (t: TestContext) => {
     const app = await build(t);
-    const repo = app.ordersRepository;
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const pending = await repo.create({
       id: 90,

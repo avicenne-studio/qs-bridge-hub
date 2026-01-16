@@ -1,6 +1,8 @@
 # Qubic Solana Bridge Hub
 
-This repository hosts the Hub responsible for validating Solana <-> Qubic bridge transactions.
+## Overview
+
+The Hub is a data aggregator for the Qubic <-> Solana bridge, collecting and consolidating data from the Oracles network.
 
 ## Prerequisites
 
@@ -24,6 +26,18 @@ Set `SQLITE_DB_FILE` to the database path.
 * **Local Node.js (optional):** `./data/hub.sqlite3` inside the repository
 
 The Hub creates the SQLite database automatically on first launch.
+
+### Configuration Reference
+
+Key environment variables (see `.env.example` for the full list):
+
+* `NODE_ENV`: must be `production` (used by runtime defaults).
+* `SQLITE_DB_FILE`: SQLite file path.
+* `HOST` / `PORT`: API bind host/port.
+* `ORACLE_URLS`: comma-separated list of oracle base URLs.
+* `ORACLE_SIGNATURE_THRESHOLD`: minimum oracle signatures required.
+* `HUB_KEYS_FILE`: JSON file path containing hub signing keys.
+* `RATE_LIMIT_MAX`: per-window request limit (keep low in tests).
 
 ## Security: Hub Identity & Key Rotation
 
@@ -49,6 +63,19 @@ Inline PEM works too (use `\\n` for newlines):
 ```bash
 npm run generate-public-key -- "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
 ```
+
+## Simulation
+
+Run the local simulation script:
+
+```bash
+npm run simulation
+```
+
+It executes `scripts/simulation.js`, which exercises the Hub locally for development and testing.
+
+If you want to launch a full network of Oracles in simulation mode, use the Oracles repository:
+https://github.com/avicenne-studio/qs-bridge-oracle
 
 
 ## Development
@@ -145,3 +172,15 @@ Autofix:
 ```bash
 npm run lint:fix
 ```
+
+## Contributing
+
+See `CONTRIBUTING.md` for development workflow, testing expectations, and PR guidelines.
+
+## Security
+
+Please report security issues via `SECURITY.md`.
+
+## License
+
+Licensed under the terms in `LICENSE`.

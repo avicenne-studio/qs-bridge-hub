@@ -2,6 +2,10 @@ import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { PollerHandle, RECOMMENDED_POLLING_DEFAULTS } from "../infra/poller.js";
 import { OracleOrder } from "./indexer/schemas/order.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "./indexer/orders.repository.js";
 
 type OracleStatus = "ok" | "down";
 
@@ -167,6 +171,8 @@ function startOrdersPolling(
   service: OracleServiceCore,
   urls: string[]
 ): PollerHandle {
+  const ordersRepository =
+    fastify.getDecorator<OrdersRepository>(kOrdersRepository);
   const client = fastify.undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
   const signatureThreshold = Math.max(
@@ -222,7 +228,7 @@ function startOrdersPolling(
           const consensus =
             fastify.oracleOrdersReconciliatior.reconcile(reconciledOrders);
 
-          const existing = await fastify.ordersRepository.findById(orderId);
+          const existing = await ordersRepository.findById(orderId);
           if (!existing) {
             fastify.log.warn(
               { orderId },
@@ -232,7 +238,7 @@ function startOrdersPolling(
           }
 
           const signatureCounts =
-            await fastify.ordersRepository.addSignatures(orderId, signatures);
+            await ordersRepository.addSignatures(orderId, signatures);
           const canBeRelayable = consensus.status !== "finalized";
           const meetsThreshold = signatureCounts.total >= signatureThreshold;
           const nextStatus =
@@ -240,7 +246,7 @@ function startOrdersPolling(
               ? "ready-for-relay"
               : consensus.status;
 
-          const updated = await fastify.ordersRepository.update(orderId, {
+          const updated = await ordersRepository.update(orderId, {
             status: nextStatus,
           });
 
