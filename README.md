@@ -1,8 +1,10 @@
 # Qubic Solana Bridge Hub
 
-## Overview
-
 The Hub is a data aggregator for the Qubic <-> Solana bridge, collecting and consolidating data from the Oracles network.
+
+## Governance
+
+This project is open source and maintained by Avicenne as part of the Qubic incubation program.
 
 ## Prerequisites
 
