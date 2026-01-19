@@ -138,4 +138,5 @@ pnpm-lock.yaml
 yarn.lock
 
 
-data/oracle.sqlite3
+# sqlite
+.data
