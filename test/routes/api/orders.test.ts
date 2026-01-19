@@ -1,24 +1,35 @@
 import { test, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "../../../src/plugins/app/indexer/orders.repository.js";
+
+const makeId = (value: number) =>
+  `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 
 async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
-  await app.ordersRepository.create({
-    id: 401,
+  const ordersRepository =
+    app.getDecorator<OrdersRepository>(kOrdersRepository);
+  await ordersRepository.create({
+    id: makeId(401),
     source: "solana",
     dest: "qubic",
     from: "A",
     to: "B",
-    amount: 10,
+    amount: "10",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
-  await app.ordersRepository.create({
-    id: 402,
+  await ordersRepository.create({
+    id: makeId(402),
     source: "qubic",
     dest: "solana",
     from: "C",
     to: "D",
-    amount: 25,
+    amount: "25",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -50,40 +61,45 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
 
 test("GET /api/orders/signatures returns stored signatures", async (t: TestContext) => {
   const app = await build(t);
+  const ordersRepository =
+    app.getDecorator<OrdersRepository>(kOrdersRepository);
 
-  const first = await app.ordersRepository.create({
-    id: 501,
+  const first = await ordersRepository.create({
+    id: makeId(501),
     source: "solana",
     dest: "qubic",
     from: "A",
     to: "B",
-    amount: 10,
+    amount: "10",
+    relayerFee: "1",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
-  const second = await app.ordersRepository.create({
-    id: 502,
+  const second = await ordersRepository.create({
+    id: makeId(502),
     source: "qubic",
     dest: "solana",
     from: "C",
     to: "D",
-    amount: 20,
+    amount: "20",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
-  await app.ordersRepository.create({
-    id: 503,
+  await ordersRepository.create({
+    id: makeId(503),
     source: "qubic",
     dest: "solana",
     from: "E",
     to: "F",
-    amount: 30,
+    amount: "30",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
 
-  await app.ordersRepository.addSignatures(first!.id, ["sigA", "sigB"]);
-  await app.ordersRepository.addSignatures(second!.id, ["sigC"]);
+  await ordersRepository.addSignatures(first!.id, ["sigA", "sigB"]);
+  await ordersRepository.addSignatures(second!.id, ["sigC"]);
 
   const res = await app.inject({
     url: "/api/orders/signatures",
@@ -95,7 +111,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
   t.assert.strictEqual(body.data.length, 1);
 
   const byId = new Map(
-    body.data.map((order: { orderId: number; signatures: string[] }) => [
+    body.data.map((order: { orderId: string; signatures: string[] }) => [
       order.orderId,
       order.signatures.slice().sort(),
     ])
@@ -107,7 +123,9 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
 
 test("GET /api/orders handles repository errors", async (t: TestContext) => {
   const app = await build(t);
-  const { mock: repoMock } = t.mock.method(app.ordersRepository, "paginate");
+  const ordersRepository =
+    app.getDecorator<OrdersRepository>(kOrdersRepository);
+  const { mock: repoMock } = t.mock.method(ordersRepository, "paginate");
   repoMock.mockImplementation(() => {
     throw new Error("db down");
   });

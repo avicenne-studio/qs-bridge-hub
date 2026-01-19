@@ -1,7 +1,17 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
+import { Type } from "@sinclair/typebox";
 import { PollerHandle, RECOMMENDED_POLLING_DEFAULTS } from "../infra/poller.js";
-import { OracleOrder } from "./indexer/schemas/order.js";
+import { IdSchema, StringSchema } from "./common/schemas/common.js";
+import {
+  formatFirstError,
+  kValidation,
+} from "./common/validator.js";
+import { OracleOrder, OracleOrderSchema } from "./indexer/schemas/order.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "./indexer/orders.repository.js";
 
 type OracleStatus = "ok" | "down";
 
@@ -33,13 +43,24 @@ type PolledOracleHealth = {
 };
 
 export type OracleOrderWithSignature = OracleOrder & {
-  id: number;
+  id: string;
   signature: string;
 };
 
-type OracleOrdersResponse =
-  | { data: OracleOrderWithSignature[] }
-  | OracleOrderWithSignature[];
+const OracleOrderWithSignatureSchema = Type.Intersect([
+  Type.Object({
+    id: IdSchema,
+    signature: StringSchema,
+  }),
+  OracleOrderSchema,
+]);
+const OracleOrdersPayloadSchema = Type.Union([
+  Type.Array(OracleOrderWithSignatureSchema),
+  Type.Object({ data: Type.Array(OracleOrderWithSignatureSchema) }),
+]);
+type OracleOrdersPayload =
+  | OracleOrderWithSignature[]
+  | { data: OracleOrderWithSignature[] };
 
 function normalizeHealth(payload: OracleHealthPayload): OracleHealthRecord {
   const status: OracleStatus = payload.status === "ok" ? "ok" : "down";
@@ -87,18 +108,27 @@ function parseOracleUrls(raw: string): string[] {
 }
 
 function normalizeOrdersPayload(
-  payload: OracleOrdersResponse
+  payload: unknown,
+  fastify: FastifyInstance,
+  server: string
 ): OracleOrderWithSignature[] {
-  if (Array.isArray(payload)) {
-    return payload;
+  const validation = fastify[kValidation];
+  if (!validation.isValid<OracleOrdersPayload>(OracleOrdersPayloadSchema, payload)) {
+    const reason = formatFirstError(OracleOrdersPayloadSchema, payload);
+    fastify.log.warn(
+      { reason, server },
+      "oracle orders poll returned invalid payload"
+    );
+    return [];
   }
-  return payload.data ?? [];
+
+  return Array.isArray(payload) ? payload : payload.data;
 }
 
 export function groupOrdersById(
   orders: OracleOrderWithSignature[]
 ): OracleOrderWithSignature[][] {
-  const grouped = new Map<number, OracleOrderWithSignature[]>();
+  const grouped = new Map<string, OracleOrderWithSignature[]>();
 
   for (const order of orders) {
     const list = grouped.get(order.id) ?? [];
@@ -168,6 +198,8 @@ function startOrdersPolling(
   urls: string[]
 ): PollerHandle {
   const client = fastify.undiciClient.create();
+  const ordersRepository =
+    fastify.getDecorator<OrdersRepository>(kOrdersRepository);
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
   const signatureThreshold = Math.max(
     1,
@@ -188,13 +220,13 @@ function startOrdersPolling(
       });
 
       try {
-        const payload = await client.getJson<OracleOrdersResponse>(
+        const payload = await client.getJson<unknown>(
           server,
           "/api/orders",
           signal,
           headers
         );
-        return normalizeOrdersPayload(payload);
+        return normalizeOrdersPayload(payload, fastify, server);
       } catch (err) {
         fastify.log.warn(
           { err, server },
@@ -222,7 +254,7 @@ function startOrdersPolling(
           const consensus =
             fastify.oracleOrdersReconciliatior.reconcile(reconciledOrders);
 
-          const existing = await fastify.ordersRepository.findById(orderId);
+          const existing = await ordersRepository.findById(orderId);
           if (!existing) {
             fastify.log.warn(
               { orderId },
@@ -232,7 +264,7 @@ function startOrdersPolling(
           }
 
           const signatureCounts =
-            await fastify.ordersRepository.addSignatures(orderId, signatures);
+            await ordersRepository.addSignatures(orderId, signatures);
           const canBeRelayable = consensus.status !== "finalized";
           const meetsThreshold = signatureCounts.total >= signatureThreshold;
           const nextStatus =
@@ -240,7 +272,7 @@ function startOrdersPolling(
               ? "ready-for-relay"
               : consensus.status;
 
-          const updated = await fastify.ordersRepository.update(orderId, {
+          const updated = await ordersRepository.update(orderId, {
             status: nextStatus,
           });
 
@@ -293,6 +325,7 @@ export default fp(
       "undici-client",
       "orders-repository",
       "oracle-orders-reconciliation",
+      "validation",
     ],
   }
 );

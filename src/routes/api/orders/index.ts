@@ -6,7 +6,11 @@ import {
   OracleChain,
   OracleOrderSchema,
 } from "../../../plugins/app/indexer/schemas/order.js";
-import { StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import { IdSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import {
+  kOrdersRepository,
+  type OrdersRepository,
+} from "../../../plugins/app/indexer/orders.repository.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -22,7 +26,7 @@ const OrdersQueryParamsSchema = Type.Object({
 });
 
 const StoredOrderSchema = Type.Intersect([
-  Type.Object({ id: Type.Integer({ minimum: 1 }) }),
+  Type.Object({ id: IdSchema }),
   OracleOrderSchema,
 ]);
 
@@ -38,7 +42,7 @@ const OrdersResponseSchema = Type.Object({
 const SignatureSchema = StringSchema;
 
 const RelayableSignatureSchema = Type.Object({
-  orderId: Type.Integer({ minimum: 1 }),
+  orderId: IdSchema,
   signatures: Type.Array(SignatureSchema, { minItems: 1 }),
 });
 
@@ -47,6 +51,8 @@ const RelayableSignaturesSchema = Type.Object({
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
+  const ordersRepository =
+    fastify.getDecorator<OrdersRepository>(kOrdersRepository);
   fastify.get(
     "/",
     {
@@ -61,7 +67,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       const { page, limit, order, source, dest } = request.query;
 
       try {
-        const result = await fastify.ordersRepository.paginate({
+        const result = await ordersRepository.paginate({
           page,
           limit,
           order,
@@ -98,8 +104,8 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         1,
         Math.floor(fastify.config.ORACLE_SIGNATURE_THRESHOLD)
       );
-      const ids = await fastify.ordersRepository.findRelayableIds();
-      const orders = await fastify.ordersRepository.findByIdsWithSignatures(ids);
+      const ids = await ordersRepository.findRelayableIds();
+      const orders = await ordersRepository.findByIdsWithSignatures(ids);
 
       return {
         data: orders

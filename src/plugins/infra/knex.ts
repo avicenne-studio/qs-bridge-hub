@@ -6,11 +6,11 @@ import {
   ORDER_SIGNATURES_TABLE_NAME,
 } from "../app/indexer/orders.repository.js";
 
-declare module "fastify" {
-  export interface FastifyInstance {
-    knex: Knex;
-  }
+export interface KnexAccessor {
+  get(): Knex;
 }
+
+export const kKnex = Symbol("infra.knex");
 
 export const autoConfig = (fastify: FastifyInstance): Knex.Config => {
   const filename = fastify.config.SQLITE_DB_FILE;
@@ -28,36 +28,41 @@ export const autoConfig = (fastify: FastifyInstance): Knex.Config => {
 export default fp(
   async (fastify: FastifyInstance, opts: Knex.Config) => {
     const db = knex(opts);
-    fastify.decorate("knex", db);
+    // Knex is callable; avoid Fastify binding functions by exposing an accessor.
+    const accessor: KnexAccessor = {
+      get: () => db,
+    };
+    fastify.decorate(kKnex, accessor);
 
-    fastify.addHook("onClose", async (instance) => {
-      await instance.knex.destroy();
+    fastify.addHook("onClose", async () => {
+      await db.destroy();
     });
 
     fastify.addHook("onReady", async () => {
-      const hasOrdersTable = await fastify.knex.schema.hasTable(ORDERS_TABLE_NAME);
+      const hasOrdersTable = await db.schema.hasTable(ORDERS_TABLE_NAME);
       if (!hasOrdersTable) {
-        await fastify.knex.schema.createTable(ORDERS_TABLE_NAME, (table) => {
-          table.integer("id").primary().notNullable();
+        await db.schema.createTable(ORDERS_TABLE_NAME, (table) => {
+          table.string("id").primary().notNullable();
           table.string("source").notNullable();
           table.string("dest").notNullable();
           table.string("from").notNullable();
           table.string("to").notNullable();
-          table.float("amount").notNullable();
+          table.string("amount").notNullable();
+          table.string("relayerFee").notNullable().defaultTo("0");
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
       }
 
-      const hasSignaturesTable = await fastify.knex.schema.hasTable(
+      const hasSignaturesTable = await db.schema.hasTable(
         ORDER_SIGNATURES_TABLE_NAME
       );
       if (!hasSignaturesTable) {
-        await fastify.knex.schema.createTable(
+        await db.schema.createTable(
           ORDER_SIGNATURES_TABLE_NAME,
           (table) => {
             table.increments("id");
-            table.integer("order_id").notNullable();
+            table.string("order_id").notNullable();
             table.string("signature").notNullable();
             table.unique(["order_id", "signature"]);
           }

@@ -5,6 +5,7 @@ declare module 'fastify' {
   export interface FastifyInstance {
     config: {
       PORT: number;
+      HOST: string;
       RATE_LIMIT_MAX: number;
       SQLITE_DB_FILE: string;
       ORACLE_URLS: string;
@@ -19,6 +20,7 @@ const schema = {
   required: [
     'SQLITE_DB_FILE',
     'PORT',
+    'HOST',
     'ORACLE_URLS',
     'ORACLE_SIGNATURE_THRESHOLD',
     'HUB_KEYS_FILE'
@@ -33,6 +35,11 @@ const schema = {
     },
     PORT: {
       type: 'number',
+    },
+    HOST: {
+      type: 'string',
+      default: '0.0.0.0',
+      pattern: '^(?:localhost|(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)|(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*|\\[[0-9A-Fa-f:.]+\\])$'
     },
     ORACLE_URLS: {
       type: 'string',
