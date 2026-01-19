@@ -1,9 +1,21 @@
 import { it, describe, TestContext } from "node:test";
+import { randomUUID } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
+
+const orderIds = new Map<number, string>();
+const makeId = (value: number) => {
+  const existing = orderIds.get(value);
+  if (existing) {
+    return existing;
+  }
+  const id = randomUUID();
+  orderIds.set(value, id);
+  return id;
+};
 
 describe("ordersRepository", () => {
   it("should create and retrieve an order by id", async (t: TestContext) => {
@@ -11,23 +23,24 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
-      id: 101,
+      id: makeId(101),
       source: "solana",
       dest: "qubic",
       from: "Alice",
       to: "Bob",
-      amount: 123,
+      amount: "123",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
     t.assert.ok(created);
-    t.assert.strictEqual(created?.id, 101);
+    t.assert.strictEqual(created?.id, makeId(101));
     t.assert.strictEqual(created?.source, "solana");
     t.assert.strictEqual(created?.dest, "qubic");
     t.assert.strictEqual(created?.from, "Alice");
     t.assert.strictEqual(created?.to, "Bob");
-    t.assert.strictEqual(created?.amount, 123);
+    t.assert.strictEqual(created?.amount, "123");
     t.assert.strictEqual(created?.oracle_accept_to_relay, false);
     t.assert.strictEqual(created?.status, "in-progress");
 
@@ -49,32 +62,35 @@ describe("ordersRepository", () => {
 
     // Insert 3 orders
     await repo.create({
-      id: 10,
+      id: makeId(10),
       source: "solana",
       dest: "qubic",
       from: "A",
       to: "B",
-      amount: 10,
+      amount: "10",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
-      id: 20,
+      id: makeId(20),
       source: "solana",
       dest: "qubic",
       from: "C",
       to: "D",
-      amount: 20,
+      amount: "20",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
     await repo.create({
-      id: 30,
+      id: makeId(30),
       source: "qubic",
       dest: "solana",
       from: "E",
       to: "F",
-      amount: 30,
+      amount: "30",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -87,8 +103,9 @@ describe("ordersRepository", () => {
 
     t.assert.strictEqual(page1.orders.length, 2);
     t.assert.strictEqual(page1.total, 3);
-    t.assert.strictEqual(page1.orders[0].id, 10);
-    t.assert.strictEqual(page1.orders[1].id, 20);
+    const expectedPage = [makeId(10), makeId(20), makeId(30)].sort();
+    t.assert.strictEqual(page1.orders[0].id, expectedPage[0]);
+    t.assert.strictEqual(page1.orders[1].id, expectedPage[1]);
 
     const page2 = await repo.paginate({
       page: 2,
@@ -97,7 +114,7 @@ describe("ordersRepository", () => {
     });
 
     t.assert.strictEqual(page2.orders.length, 1);
-    t.assert.strictEqual(page2.orders[0].id, 30);
+    t.assert.strictEqual(page2.orders[0].id, expectedPage[2]);
   });
 
   it("should filter by source or dest", async (t: TestContext) => {
@@ -105,22 +122,24 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     await repo.create({
-      id: 11,
+      id: makeId(11),
       source: "solana",
       dest: "qubic",
       from: "X",
       to: "Y",
-      amount: 1,
+      amount: "1",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
-      id: 12,
+      id: makeId(12),
       source: "qubic",
       dest: "solana",
       from: "Z",
       to: "T",
-      amount: 2,
+      amount: "2",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
@@ -153,27 +172,28 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
-      id: 44,
+      id: makeId(44),
       source: "solana",
       dest: "qubic",
       from: "A",
       to: "B",
-      amount: 50,
+      amount: "50",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
     const updated = await repo.update(created!.id, {
-      amount: 42,
+      amount: "42",
       status: "finalized",
     });
 
     t.assert.ok(updated);
-    t.assert.strictEqual(updated?.amount, 42);
+    t.assert.strictEqual(updated?.amount, "42");
     t.assert.strictEqual(updated?.status, "finalized");
 
     const fetched = await repo.findById(created!.id);
-    t.assert.strictEqual(fetched?.amount, 42);
+    t.assert.strictEqual(fetched?.amount, "42");
     t.assert.strictEqual(fetched?.status, "finalized");
   });
 
@@ -183,7 +203,7 @@ describe("ordersRepository", () => {
     const app = await build(t);
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
-    const updated = await repo.update(9999, { amount: 100 });
+    const updated = await repo.update(makeId(9999), { amount: "100" });
       t.assert.strictEqual(updated, null);
     }
   );
@@ -193,12 +213,13 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
-      id: 55,
+      id: makeId(55),
       source: "solana",
       dest: "qubic",
       from: "DeleteA",
       to: "DeleteB",
-      amount: 7,
+      amount: "7",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
@@ -216,7 +237,7 @@ describe("ordersRepository", () => {
     const app = await build(t);
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
-    const removed = await repo.delete(9999);
+    const removed = await repo.delete(makeId(9999));
       t.assert.strictEqual(removed, false);
     }
   );
@@ -233,7 +254,7 @@ describe("ordersRepository", () => {
     const app = await build(t);
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
-    const orders = await repo.findByIdsWithSignatures([123]);
+    const orders = await repo.findByIdsWithSignatures([makeId(123)]);
     t.assert.deepStrictEqual(orders, []);
   });
 
@@ -242,12 +263,13 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
-      id: 77,
+      id: makeId(77),
       source: "solana",
       dest: "qubic",
       from: "SigA",
       to: "SigB",
-      amount: 5,
+      amount: "5",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -275,12 +297,13 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const created = await repo.create({
-      id: 78,
+      id: makeId(78),
       source: "solana",
       dest: "qubic",
       from: "NoSigA",
       to: "NoSigB",
-      amount: 9,
+      amount: "9",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -295,40 +318,44 @@ describe("ordersRepository", () => {
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
     const pending = await repo.create({
-      id: 90,
+      id: makeId(90),
       source: "solana",
       dest: "qubic",
       from: "P",
       to: "Q",
-      amount: 1,
+      amount: "1",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "pending",
     });
     const inProgress = await repo.create({
-      id: 91,
+      id: makeId(91),
       source: "solana",
       dest: "qubic",
       from: "R",
       to: "S",
-      amount: 2,
+      amount: "2",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
-      id: 92,
+      id: makeId(92),
       source: "solana",
       dest: "qubic",
       from: "T",
       to: "U",
-      amount: 3,
+      amount: "3",
+      relayerFee: "1",
       oracle_accept_to_relay: false,
       status: "ready-for-relay",
     });
 
+    const expectedActiveIds = [pending!.id, inProgress!.id].sort();
     const activeIds = await repo.findActivesIds();
-    t.assert.deepStrictEqual(activeIds, [pending!.id, inProgress!.id]);
+    t.assert.deepStrictEqual(activeIds, expectedActiveIds);
 
     const limited = await repo.findActivesIds(1);
-    t.assert.deepStrictEqual(limited, [pending!.id]);
+    t.assert.deepStrictEqual(limited, [expectedActiveIds[0]]);
   });
 });

@@ -6,7 +6,7 @@ import {
   OracleChain,
   OracleOrderSchema,
 } from "../../../plugins/app/indexer/schemas/order.js";
-import { StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import { IdSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
@@ -26,7 +26,7 @@ const OrdersQueryParamsSchema = Type.Object({
 });
 
 const StoredOrderSchema = Type.Intersect([
-  Type.Object({ id: Type.Integer({ minimum: 1 }) }),
+  Type.Object({ id: IdSchema }),
   OracleOrderSchema,
 ]);
 
@@ -42,7 +42,7 @@ const OrdersResponseSchema = Type.Object({
 const SignatureSchema = StringSchema;
 
 const RelayableSignatureSchema = Type.Object({
-  orderId: Type.Integer({ minimum: 1 }),
+  orderId: IdSchema,
   signatures: Type.Array(SignatureSchema, { minItems: 1 }),
 });
 

@@ -8,7 +8,8 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   dest: "qubic",
   from: "A",
   to: "B",
-  amount: 10,
+  amount: "10",
+  relayerFee: "1",
   oracle_accept_to_relay: false,
 };
 

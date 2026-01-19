@@ -42,12 +42,13 @@ export default fp(
       const hasOrdersTable = await db.schema.hasTable(ORDERS_TABLE_NAME);
       if (!hasOrdersTable) {
         await db.schema.createTable(ORDERS_TABLE_NAME, (table) => {
-          table.integer("id").primary().notNullable();
+          table.string("id").primary().notNullable();
           table.string("source").notNullable();
           table.string("dest").notNullable();
           table.string("from").notNullable();
           table.string("to").notNullable();
-          table.float("amount").notNullable();
+          table.string("amount").notNullable();
+          table.string("relayerFee").notNullable().defaultTo("0");
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
@@ -61,7 +62,7 @@ export default fp(
           ORDER_SIGNATURES_TABLE_NAME,
           (table) => {
             table.increments("id");
-            table.integer("order_id").notNullable();
+            table.string("order_id").notNullable();
             table.string("signature").notNullable();
             table.unique(["order_id", "signature"]);
           }

@@ -1,7 +1,7 @@
 import { Static, Type } from "@sinclair/typebox";
 import { QubicTransaction } from "./qubic-transaction.js";
 import { SolanaTransaction } from "./solana-transaction.js";
-import { StringSchema } from "../../common/schemas/common.js";
+import { AmountSchema, StringSchema } from "../../common/schemas/common.js";
 
 export const OracleChain = Type.Union([
   Type.Literal("qubic"),
@@ -20,7 +20,8 @@ export const OracleOrderSchema = Type.Object({
   dest: OracleChain,
   from: StringSchema,
   to: StringSchema,
-  amount: Type.Number(),
+  amount: AmountSchema,
+  relayerFee: AmountSchema,
   oracle_accept_to_relay: Type.Boolean(),
   status: OracleOrderStatus,
 });
@@ -43,7 +44,8 @@ export function orderFromQubic(
     dest,
     from: tx.sender,
     to: tx.recipient,
-    amount: tx.amount,
+    amount: String(tx.amount),
+    relayerFee: "0",
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
@@ -63,6 +65,7 @@ export function orderFromSolana(
     from: decoded.from,
     to: decoded.to,
     amount: decoded.amount,
+    relayerFee: "0",
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
@@ -74,7 +77,7 @@ export function orderFromSolana(
 export function normalizeBridgeInstruction(_data: string): {
   from: string;
   to: string;
-  amount: number;
+  amount: string;
 } {
   throw new Error("normalizeBridgeInstruction not implemented");
 }

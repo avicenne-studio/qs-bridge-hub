@@ -9,27 +9,27 @@ export const ORDER_SIGNATURES_TABLE_NAME = "order_signatures";
 
 export interface OrdersRepository {
   paginate(q: OrderQuery): Promise<{ orders: StoredOrder[]; total: number }>;
-  findById(id: number): Promise<StoredOrder | null>;
+  findById(id: string): Promise<StoredOrder | null>;
   create(newOrder: StoredOrder): Promise<StoredOrder | null>;
-  update(id: number, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
-  delete(id: number): Promise<boolean>;
-  findActivesIds(limit?: number): Promise<number[]>;
-  findRelayableIds(limit?: number): Promise<number[]>;
+  update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
+  delete(id: string): Promise<boolean>;
+  findActivesIds(limit?: number): Promise<string[]>;
+  findRelayableIds(limit?: number): Promise<string[]>;
   addSignatures(
-    orderId: number,
+    orderId: string,
     signatures: string[]
   ): Promise<{ added: number; total: number }>;
-  findByIdsWithSignatures(ids: number[]): Promise<OrderWithSignatures[]>;
+  findByIdsWithSignatures(ids: string[]): Promise<OrderWithSignatures[]>;
 }
 
 export const kOrdersRepository = Symbol("app.ordersRepository");
 
-type PersistedOrder = OracleOrder & { id: number };
-export type StoredOrder = OracleOrder & { id: number };
+type PersistedOrder = OracleOrder & { id: string };
+export type StoredOrder = OracleOrder & { id: string };
 type CreateOrder = StoredOrder;
 type UpdateOrder = Partial<OracleOrder>;
 type PersistedSignature = {
-  order_id: number;
+  order_id: string;
   signature: string;
 };
 export type StoredSignature = PersistedSignature & { id: number };
@@ -60,7 +60,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       const offset = (q.page - 1) * q.limit;
 
       const query = knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
         .select(knex.raw("count(*) OVER() as total"));
 
       if (q.source !== undefined) {
@@ -88,9 +88,9 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       };
     },
 
-    async findById(id: number) {
+    async findById(id: string) {
       const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
         .where("id", id)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
@@ -101,7 +101,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       return this.findById(newOrder.id);
     },
 
-    async update(id: number, changes: UpdateOrder) {
+    async update(id: string, changes: UpdateOrder) {
       const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
         .where("id", id)
         .update(changes);
@@ -113,7 +113,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       return this.findById(id);
     },
 
-    async delete(id: number) {
+    async delete(id: string) {
       const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
         .where("id", id)
         .delete();
@@ -128,7 +128,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         .orderBy("id", "asc")
         .limit(limit);
 
-      return rows.map((row) => Number(row.id));
+      return rows.map((row) => String(row.id));
     },
 
     async findRelayableIds(limit = 100) {
@@ -138,10 +138,10 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         .orderBy("id", "asc")
         .limit(limit);
 
-      return rows.map((row) => Number(row.id));
+      return rows.map((row) => String(row.id));
     },
 
-    async addSignatures(orderId: number, signatures: string[]) {
+    async addSignatures(orderId: string, signatures: string[]) {
       const unique = [...new Set(signatures)];
       const existing = await knex<PersistedSignature>(ORDER_SIGNATURES_TABLE_NAME)
         .select("signature")
@@ -167,13 +167,13 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       };
     },
 
-    async findByIdsWithSignatures(ids: number[]): Promise<OrderWithSignatures[]> {
+    async findByIdsWithSignatures(ids: string[]): Promise<OrderWithSignatures[]> {
       if (ids.length === 0) {
         return [];
       }
 
       const orders = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "oracle_accept_to_relay", "status")
+        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
         .whereIn("id", ids)
         .orderBy("id", "asc");
 
@@ -181,12 +181,12 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         return [];
       }
 
-      const orderIds = orders.map((order) => Number((order as StoredOrder).id));
+      const orderIds = orders.map((order) => String((order as StoredOrder).id));
       const signatures = await knex<StoredSignature>(ORDER_SIGNATURES_TABLE_NAME)
         .select("id", "order_id", "signature")
         .whereIn("order_id", orderIds);
 
-      const grouped = new Map<number, StoredSignature[]>();
+      const grouped = new Map<string, StoredSignature[]>();
       for (const signature of signatures) {
         const list = grouped.get(signature.order_id) ?? [];
         list.push(signature);

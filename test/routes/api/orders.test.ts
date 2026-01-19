@@ -1,30 +1,44 @@
 import { test, TestContext } from "node:test";
+import { randomUUID } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
 
+const orderIds = new Map<number, string>();
+const makeId = (value: number) => {
+  const existing = orderIds.get(value);
+  if (existing) {
+    return existing;
+  }
+  const id = randomUUID();
+  orderIds.set(value, id);
+  return id;
+};
+
 async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
   const ordersRepository =
     app.getDecorator<OrdersRepository>(kOrdersRepository);
   await ordersRepository.create({
-    id: 401,
+    id: makeId(401),
     source: "solana",
     dest: "qubic",
     from: "A",
     to: "B",
-    amount: 10,
+    amount: "10",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await ordersRepository.create({
-    id: 402,
+    id: makeId(402),
     source: "qubic",
     dest: "solana",
     from: "C",
     to: "D",
-    amount: 25,
+    amount: "25",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -60,32 +74,35 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     app.getDecorator<OrdersRepository>(kOrdersRepository);
 
   const first = await ordersRepository.create({
-    id: 501,
+    id: makeId(501),
     source: "solana",
     dest: "qubic",
     from: "A",
     to: "B",
-    amount: 10,
+    amount: "10",
+    relayerFee: "1",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
   const second = await ordersRepository.create({
-    id: 502,
+    id: makeId(502),
     source: "qubic",
     dest: "solana",
     from: "C",
     to: "D",
-    amount: 20,
+    amount: "20",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await ordersRepository.create({
-    id: 503,
+    id: makeId(503),
     source: "qubic",
     dest: "solana",
     from: "E",
     to: "F",
-    amount: 30,
+    amount: "30",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -103,7 +120,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
   t.assert.strictEqual(body.data.length, 1);
 
   const byId = new Map(
-    body.data.map((order: { orderId: number; signatures: string[] }) => [
+    body.data.map((order: { orderId: string; signatures: string[] }) => [
       order.orderId,
       order.signatures.slice().sort(),
     ])

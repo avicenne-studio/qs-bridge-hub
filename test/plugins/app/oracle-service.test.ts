@@ -1,6 +1,6 @@
 import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import { groupOrdersById } from "../../../src/plugins/app/oracle-service.js";
 import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-service.js";
@@ -20,15 +20,27 @@ const ORACLE_URLS = [
 
 type ResponseMode = "data" | "array" | "empty";
 
+const orderIds = new Map<number, string>();
+const makeId = (value: number) => {
+  const existing = orderIds.get(value);
+  if (existing) {
+    return existing;
+  }
+  const id = randomUUID();
+  orderIds.set(value, id);
+  return id;
+};
+
 function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
   return {
-    id: 1,
+    id: makeId(1),
     signature: "sig",
     source: "solana",
     dest: "qubic",
     from: "A",
     to: "B",
-    amount: 10,
+    amount: "10",
+    relayerFee: "1",
     oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
@@ -81,12 +93,14 @@ function createOrdersServer(opts: {
   onHealthRequest?: (headers: Record<string, string | string[] | undefined>) => void;
   onOrdersRequest?: (headers: Record<string, string | string[] | undefined>) => void;
   ordersStatusCode?: number;
+  responsePayload?: unknown;
 }) {
   const {
     handler,
     responseMode = "data",
     healthStatus = "ok",
     ordersStatusCode,
+    responsePayload,
   } = opts;
 
   return createServer(async (req, res) => {
@@ -112,10 +126,14 @@ function createOrdersServer(opts: {
         res.writeHead(ordersStatusCode).end();
         return;
       }
-      const payload = handler();
-
       res.writeHead(200, { "content-type": "application/json" });
 
+      if (responsePayload !== undefined) {
+        res.end(JSON.stringify(responsePayload));
+        return;
+      }
+
+      const payload = handler();
       if (responseMode === "empty") {
         res.end(JSON.stringify({}));
         return;
@@ -221,17 +239,17 @@ describe("oracle service", () => {
 
     test("groups orders by id", (t: TestContext) => {
       const orders: OracleOrderWithSignature[] = [
-        orderBase({ id: 1, signature: "sig1", status: "in-progress", amount: 1 }),
-        orderBase({ id: 2, signature: "sig2", status: "in-progress", amount: 2, from: "C", to: "D" }),
-        orderBase({ id: 1, signature: "sig3", status: "ready-for-relay", amount: 1 }),
+        orderBase({ id: makeId(1), signature: "sig1", status: "in-progress", amount: "1" }),
+        orderBase({ id: makeId(2), signature: "sig2", status: "in-progress", amount: "2", from: "C", to: "D" }),
+        orderBase({ id: makeId(1), signature: "sig3", status: "ready-for-relay", amount: "1" }),
       ];
 
       const grouped = groupOrdersById(orders);
 
       t.assert.strictEqual(grouped.length, 2);
       t.assert.strictEqual(grouped[0].length, 2);
-      t.assert.strictEqual(grouped[0][0].id, 1);
-      t.assert.strictEqual(grouped[1][0].id, 2);
+      t.assert.strictEqual(grouped[0][0].id, makeId(1));
+      t.assert.strictEqual(grouped[1][0].id, makeId(2));
     });
 
   test("polls remote health endpoints", async (t: TestContext) => {
@@ -322,22 +340,23 @@ describe("oracle service", () => {
       status: OracleOrderWithSignature["status"],
       overrides: Partial<OracleOrderWithSignature> = {}
     ) {
-      return (id: number): OracleOrderWithSignature =>
+      return (id: string): OracleOrderWithSignature =>
         orderBase({ id, signature, status, ...overrides });
     }
 
     async function setupThreeOrderServers(
       t: TestContext,
       opts: {
-        builders: Array<(id: number) => OracleOrderWithSignature>;
+        builders: Array<(id: string) => OracleOrderWithSignature>;
         responseModes?: [ResponseMode?, ResponseMode?, ResponseMode?];
-        orderIds?: number[];
+        orderIds?: string[];
         healthStatuses?: [
           "ok" | "down" | "slow",
           "ok" | "down" | "slow",
           "ok" | "down" | "slow"
         ];
         ordersStatusCodes?: [number?, number?, number?];
+        responsePayloads?: [unknown?, unknown?, unknown?];
         onOrdersRequests?: Array<
           (headers: Record<string, string | string[] | undefined>) => void
         >;
@@ -346,9 +365,10 @@ describe("oracle service", () => {
       const {
         builders,
         responseModes = ["data", "data", "data"],
-        orderIds = [1],
+        orderIds = [makeId(1)],
         healthStatuses = ["ok", "ok", "ok"],
         ordersStatusCodes = [],
+        responsePayloads = [],
         onOrdersRequests = [],
       } = opts;
 
@@ -358,6 +378,7 @@ describe("oracle service", () => {
           responseMode: responseModes[0],
           healthStatus: healthStatuses[0],
           ordersStatusCode: ordersStatusCodes[0],
+          responsePayload: responsePayloads[0],
           onOrdersRequest: onOrdersRequests[0],
         }),
         createOrdersServer({
@@ -365,6 +386,7 @@ describe("oracle service", () => {
           responseMode: responseModes[1],
           healthStatus: healthStatuses[1],
           ordersStatusCode: ordersStatusCodes[1],
+          responsePayload: responsePayloads[1],
           onOrdersRequest: onOrdersRequests[1],
         }),
         createOrdersServer({
@@ -372,6 +394,7 @@ describe("oracle service", () => {
           responseMode: responseModes[2],
           healthStatus: healthStatuses[2],
           ordersStatusCode: ordersStatusCodes[2],
+          responsePayload: responsePayloads[2],
           onOrdersRequest: onOrdersRequests[2],
         }),
       ];
@@ -388,7 +411,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-3", "pending"),
         ],
         responseModes: ["data", "data", "array"],
-        orderIds: [101],
+        orderIds: [makeId(101)],
       });
 
       const app = await withApp(t);
@@ -396,12 +419,13 @@ describe("oracle service", () => {
       markOraclesHealthy(app, ORACLE_URLS);
 
       const created = await ordersRepository.create({
-        id: 101,
+        id: makeId(101),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -433,7 +457,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-3", "pending"),
         ],
         responseModes: ["data", "data", "array"],
-        orderIds: [151],
+        orderIds: [makeId(151)],
       });
 
       const app = await withApp(t);
@@ -441,12 +465,13 @@ describe("oracle service", () => {
       markOraclesHealthy(app, ORACLE_URLS);
 
       const created = await ordersRepository.create({
-        id: 151,
+        id: makeId(151),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -473,7 +498,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-2", "pending"),
           serverOrderFactory("sig-3", "pending"),
         ],
-        orderIds: [161],
+        orderIds: [makeId(161)],
         healthStatuses: ["ok", "down", "down"],
       });
 
@@ -482,12 +507,13 @@ describe("oracle service", () => {
       markOraclesHealthy(app, [ORACLE_URLS[0]]);
 
       const created = await ordersRepository.create({
-        id: 161,
+        id: makeId(161),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -520,7 +546,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-2", "finalized"),
           serverOrderFactory("sig-3", "finalized"),
         ],
-        orderIds: [111],
+        orderIds: [makeId(111)],
         ordersStatusCodes: [503, 200, 200],
       });
 
@@ -540,6 +566,32 @@ describe("oracle service", () => {
       await handle.stop();
     });
 
+    test("logs when oracle orders payload is invalid", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        responsePayloads: [{ data: "nope" }, { data: "nope" }, { data: "nope" }],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const handle = app.oracleService.pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+        )
+      );
+
+      await handle.stop();
+    });
+
     test("skips unhealthy oracles when polling orders", async (t: TestContext) => {
       let downCalls = 0;
 
@@ -552,7 +604,7 @@ describe("oracle service", () => {
             return orderBase({ id, signature: "sig-3", status: "finalized" });
           },
         ],
-        orderIds: [1],
+        orderIds: [makeId(1)],
         healthStatuses: ["ok", "ok", "down"],
       });
 
@@ -561,12 +613,13 @@ describe("oracle service", () => {
       markOraclesHealthy(app, [ORACLE_URLS[0], ORACLE_URLS[1]]); // Don't set the third healthy
 
       const created = await ordersRepository.create({
-        id: 1,
+        id: makeId(1),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -597,7 +650,7 @@ describe("oracle service", () => {
           serverOrderFactory("sig-2", "finalized"),
           serverOrderFactory("sig-3", "finalized"),
         ],
-        orderIds: [999],
+        orderIds: [makeId(999)],
         responseModes: ["data", "data", "data"],
         healthStatuses: ["ok", "ok", "ok"],
         onOrdersRequests: [
@@ -628,21 +681,22 @@ describe("oracle service", () => {
         builders: [
           serverOrderFactory("sig-1", "finalized"),
           serverOrderFactory("sig-2", "finalized"),
-          serverOrderFactory("sig-3", "finalized", { amount: 11 }),
+          serverOrderFactory("sig-3", "finalized", { amount: "11" }),
         ],
-        orderIds: [201],
+        orderIds: [makeId(201)],
       });
 
       const app = await withApp(t);
       const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
       await ordersRepository.create({
-        id: 201,
+        id: makeId(201),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -669,19 +723,20 @@ describe("oracle service", () => {
           serverOrderFactory("sig-3", "finalized"),
         ],
         responseModes: ["data", "data", "empty"],
-        orderIds: [301],
+        orderIds: [makeId(301)],
       });
 
       const app = await withApp(t);
       const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
       const created = await ordersRepository.create({
-        id: 301,
+        id: makeId(301),
         source: "solana",
         dest: "qubic",
         from: "A",
         to: "B",
-        amount: 10,
+        amount: "10",
+        relayerFee: "1",
         oracle_accept_to_relay: false,
         status: "pending",
       });
