@@ -1,6 +1,7 @@
 import { createHash, createPrivateKey, randomBytes, sign } from "node:crypto";
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
+import { HubKeys, kHubKeys } from "./hub-keys.js";
 
 export type SignRequestInput = {
   method: string;
@@ -16,6 +17,12 @@ export type SignedHeaders = {
   "X-Body-Hash": string;
   "X-Signature": string;
 };
+
+export type HubSignerService = {
+  signHeaders(input: SignRequestInput): SignedHeaders;
+};
+
+export const kHubSigner = Symbol("infra.hubSigner");
 
 export function hashBody(body?: string | Buffer | Uint8Array): string {
   if (!body) {
@@ -47,19 +54,12 @@ export function buildCanonicalString(input: {
   );
 }
 
-declare module "fastify" {
-  interface FastifyInstance {
-    hubSigner: {
-      signHeaders(input: SignRequestInput): SignedHeaders;
-    };
-  }
-}
-
 export default fp(
   async function hubSignerPlugin(fastify: FastifyInstance) {
-    const key = createPrivateKey(fastify.hubKeys.current.privateKeyPem);
+    const keys = fastify.getDecorator<HubKeys>(kHubKeys);
+    const key = createPrivateKey(keys.current.privateKeyPem);
 
-    fastify.decorate("hubSigner", {
+    fastify.decorate(kHubSigner, {
       signHeaders(input: SignRequestInput): SignedHeaders {
         const timestamp = Math.floor(Date.now() / 1000).toString();
         const nonce = randomBytes(16).toString("base64");
@@ -67,7 +67,7 @@ export default fp(
         const canonical = buildCanonicalString({
           method: input.method,
           url: input.url,
-          hubId: fastify.hubKeys.hubId,
+          hubId: keys.hubId,
           timestamp,
           nonce,
           bodyHash,
@@ -77,8 +77,8 @@ export default fp(
         );
 
         return {
-          "X-Hub-Id": fastify.hubKeys.hubId,
-          "X-Key-Id": fastify.hubKeys.current.kid,
+          "X-Hub-Id": keys.hubId,
+          "X-Key-Id": keys.current.kid,
           "X-Timestamp": timestamp,
           "X-Nonce": nonce,
           "X-Body-Hash": bodyHash,

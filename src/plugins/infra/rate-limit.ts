@@ -1,9 +1,11 @@
 import fastifyRateLimit from '@fastify/rate-limit'
 import { FastifyInstance } from 'fastify'
+import { AppConfig, kConfig } from './env.js'
 
 export const autoConfig = (fastify: FastifyInstance) => {
+  const config = fastify.getDecorator<AppConfig>(kConfig)
   return {
-    max: fastify.config.RATE_LIMIT_MAX,
+    max: config.RATE_LIMIT_MAX,
     timeWindow: '1 minute'
   }
 }

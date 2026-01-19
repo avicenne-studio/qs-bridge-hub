@@ -2,6 +2,10 @@ import { describe, it, TestContext } from "node:test";
 
 import { build } from "../../helpers/build.js";
 import { OracleOrder } from "../../../src/plugins/app/indexer/schemas/order.js";
+import {
+  kOracleOrdersReconciliatior,
+  OracleOrdersReconciliatiorService,
+} from "../../../src/plugins/app/indexer/oracle-orders-reconciliation.js";
 
 const baseOrder: Omit<OracleOrder, "status"> = {
   source: "solana",
@@ -16,6 +20,10 @@ const baseOrder: Omit<OracleOrder, "status"> = {
 describe("oracleOrdersReconciliatior plugin", () => {
   it("produces the majority status", async (t: TestContext) => {
     const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
@@ -23,8 +31,7 @@ describe("oracleOrdersReconciliatior plugin", () => {
       { ...baseOrder, status: "in-progress" },
     ];
 
-    const result =
-      app.oracleOrdersReconciliatior.reconcile(orders);
+    const result = reconciliator.reconcile(orders);
 
     t.assert.strictEqual(result.status, "finalized");
     t.assert.strictEqual(result.amount, baseOrder.amount);
@@ -32,34 +39,42 @@ describe("oracleOrdersReconciliatior plugin", () => {
 
   it("throws when provided orders differ", async (t: TestContext) => {
     const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
       { ...baseOrder, to: "C", status: "finalized" },
     ];
 
-    t.assert.throws(() =>
-      app.oracleOrdersReconciliatior.reconcile(orders)
-    );
+    t.assert.throws(() => reconciliator.reconcile(orders));
   });
 
   it("throws when relayable flags differ", async (t: TestContext) => {
     const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
       { ...baseOrder, oracle_accept_to_relay: true, status: "finalized" },
     ];
 
-    t.assert.throws(() =>
-      app.oracleOrdersReconciliatior.reconcile(orders)
-    );
+    t.assert.throws(() => reconciliator.reconcile(orders));
   });
 
   it(
     "throws when consensus cannot be determined",
     async (t: TestContext) => {
     const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
@@ -67,7 +82,7 @@ describe("oracleOrdersReconciliatior plugin", () => {
     ];
 
       t.assert.throws(
-        () => app.oracleOrdersReconciliatior.reconcile(orders),
+        () => reconciliator.reconcile(orders),
         /Unable to compute a consensus status/
       );
     }
@@ -75,9 +90,13 @@ describe("oracleOrdersReconciliatior plugin", () => {
 
   it("throws when the list is empty", async (t: TestContext) => {
     const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
 
     t.assert.throws(
-      () => app.oracleOrdersReconciliatior.reconcile([]),
+      () => reconciliator.reconcile([]),
       /Cannot reconcile an empty orders list/
     );
   });

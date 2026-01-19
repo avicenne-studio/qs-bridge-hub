@@ -39,12 +39,6 @@ function createValidation(): ValidationService {
   };
 }
 
-declare module "fastify" {
-  interface FastifyInstance {
-    [kValidation]: ValidationService;
-  }
-}
-
 export default fp(
   async function validationPlugin(fastify: FastifyInstance) {
     fastify.decorate(kValidation, createValidation());

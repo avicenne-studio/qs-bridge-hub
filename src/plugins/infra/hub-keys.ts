@@ -5,6 +5,7 @@ import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { Type, Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import { AppConfig, kConfig } from "./env.js";
 
 const HubKeySchema = Type.Object({
   kid: Type.String({ minLength: 1 }),
@@ -35,6 +36,9 @@ export type HubPublicKeys = {
   current: HubPublicKey;
   next?: HubPublicKey;
 };
+
+export const kHubKeys = Symbol("infra.hubKeys");
+export const kHubPublicKeys = Symbol("infra.hubPublicKeys");
 
 function resolveKeysPath(filePath: string) {
   return path.isAbsolute(filePath)
@@ -104,18 +108,12 @@ export async function readHubKeysFromFile(
   return parsed;
 }
 
-declare module "fastify" {
-  interface FastifyInstance {
-    hubKeys: HubKeys;
-    hubPublicKeys: HubPublicKeys;
-  }
-}
-
 export default fp(
   async function hubKeysPlugin(fastify: FastifyInstance) {
-    const keys = await readHubKeysFromFile(fastify.config.HUB_KEYS_FILE);
-    fastify.decorate("hubKeys", keys);
-    fastify.decorate("hubPublicKeys", toPublicKeys(keys));
+    const config = fastify.getDecorator<AppConfig>(kConfig);
+    const keys = await readHubKeysFromFile(config.HUB_KEYS_FILE);
+    fastify.decorate(kHubKeys, keys);
+    fastify.decorate(kHubPublicKeys, toPublicKeys(keys));
   },
   {
     name: "hub-keys",

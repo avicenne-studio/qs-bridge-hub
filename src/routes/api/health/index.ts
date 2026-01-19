@@ -2,6 +2,10 @@ import {
   FastifyPluginAsyncTypebox,
   Type,
 } from "@fastify/type-provider-typebox";
+import {
+  kOracleService,
+  OracleService,
+} from "../../../plugins/app/oracle-service.js";
 
 const BridgeHealthResponseSchema = Type.Object({
   paused: Type.Literal(true),
@@ -18,6 +22,8 @@ const OraclesHealthResponseSchema = Type.Object({
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
+  const oracleService = fastify.getDecorator<OracleService>(kOracleService);
+
   fastify.get(
     "/bridge",
     {
@@ -43,7 +49,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     },
     async function handler() {
       return {
-        oracles: fastify.oracleService.list(),
+        oracles: oracleService.list(),
       };
     }
   );

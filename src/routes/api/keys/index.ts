@@ -2,6 +2,10 @@ import {
   FastifyPluginAsyncTypebox,
   Type,
 } from "@fastify/type-provider-typebox";
+import {
+  HubPublicKeys,
+  kHubPublicKeys,
+} from "../../../plugins/infra/hub-keys.js";
 
 const PublicKeySchema = Type.Object({
   kid: Type.String(),
@@ -16,6 +20,8 @@ const KeysResponseSchema = Type.Object({
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
+  const hubPublicKeys = fastify.getDecorator<HubPublicKeys>(kHubPublicKeys);
+
   fastify.get(
     "/",
     {
@@ -26,7 +32,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      return fastify.hubPublicKeys;
+      return hubPublicKeys;
     }
   );
 };

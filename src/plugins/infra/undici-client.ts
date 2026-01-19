@@ -85,20 +85,18 @@ export class UndiciClient {
   }
 }
 
-declare module "fastify" {
-  interface FastifyInstance {
-    undiciClient: {
-      defaults: Readonly<ResolvedOptions>;
-      create(options?: UndiciClientOptions): UndiciClient;
-    };
-  }
-}
+export type UndiciClientService = {
+  defaults: Readonly<ResolvedOptions>;
+  create(options?: UndiciClientOptions): UndiciClient;
+};
+
+export const kUndiciClient = Symbol("infra.undiciClient");
 
 export default fp(
   function undiciClientPlugin(fastify: FastifyInstance) {
     const clients = new Set<UndiciClient>();
 
-    fastify.decorate("undiciClient", {
+    fastify.decorate(kUndiciClient, {
       defaults: DEFAULT_CLIENT_OPTIONS,
       create(options?: UndiciClientOptions) {
         const client = new UndiciClient(options);

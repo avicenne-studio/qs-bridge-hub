@@ -1,5 +1,9 @@
 import { test, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import {
+  kOracleService,
+  type OracleService,
+} from "../../../src/plugins/app/oracle-service.js";
 
 test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
   const app = await build(t);
@@ -16,7 +20,7 @@ test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
 
 test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => {
   const app = await build(t);
-  const expected = app.oracleService.list();
+  const expected = app.getDecorator<OracleService>(kOracleService).list();
 
   const res = await app.inject({
     url: "/api/health/oracles",

@@ -2,8 +2,12 @@ import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
-import { groupOrdersById } from "../../../src/plugins/app/oracle-service.js";
-import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-service.js";
+import {
+  groupOrdersById,
+  kOracleService,
+  type OracleOrderWithSignature,
+  type OracleService,
+} from "../../../src/plugins/app/oracle-service.js";
 import { FastifyInstance } from "fastify";
 import { waitFor } from "../../helpers/wait-for.js";
 import { buildCanonicalString } from "../../../src/plugins/infra/hub-signer.js";
@@ -11,6 +15,7 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
+import { HubKeys, kHubKeys } from "../../../src/plugins/infra/hub-keys.js";
 
 const ORACLE_URLS = [
   "http://127.0.0.1:6101",
@@ -142,7 +147,10 @@ function createOrdersServer(opts: {
 }
 
 function getOracleEntry(app: FastifyInstance, url: string) {
-  return app.oracleService.list().find((e) => e.url === url);
+  return app
+    .getDecorator<OracleService>(kOracleService)
+    .list()
+    .find((e) => e.url === url);
 }
 
 function getOrdersRepository(app: FastifyInstance) {
@@ -150,9 +158,10 @@ function getOrdersRepository(app: FastifyInstance) {
 }
 
 function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
+  const oracleService = app.getDecorator<OracleService>(kOracleService);
   const timestamp = new Date().toISOString();
   for (const url of urls) {
-    app.oracleService.update(url, { status: "ok", timestamp });
+    oracleService.update(url, { status: "ok", timestamp });
   }
 }
 
@@ -209,7 +218,7 @@ async function withServers(
 describe("oracle service", () => {
   test("lists env-configured urls", async (t: TestContext) => {
     const app = await withApp(t);
-    const entries = app.oracleService.list();
+    const entries = app.getDecorator<OracleService>(kOracleService).list();
 
     t.assert.deepStrictEqual(
       entries.map((entry) => entry.url),
@@ -220,10 +229,12 @@ describe("oracle service", () => {
   describe("poll health", () => {
     test("updates records", async (t: TestContext) => {
       const app = await withApp(t);
-      const [first] = app.oracleService.list();
+      const [first] = app.getDecorator<OracleService>(kOracleService).list();
       const timestamp = new Date("2024-01-01T00:00:00.000Z").toISOString();
 
-      app.oracleService.update(first.url, { status: "ok", timestamp });
+      app
+        .getDecorator<OracleService>(kOracleService)
+        .update(first.url, { status: "ok", timestamp });
 
       const updated = getOracleEntry(app, first.url);
       t.assert.strictEqual(updated?.timestamp, timestamp);
@@ -272,7 +283,10 @@ describe("oracle service", () => {
       const app = await withApp(t);
 
       const initialEntries = new Map(
-        app.oracleService.list().map((entry) => [entry.url, entry])
+        app
+          .getDecorator<OracleService>(kOracleService)
+          .list()
+          .map((entry) => [entry.url, entry])
       );
 
       await waitFor(async () => {
@@ -288,7 +302,7 @@ describe("oracle service", () => {
         );
       });
 
-      const snapshot = app.oracleService.list();
+      const snapshot = app.getDecorator<OracleService>(kOracleService).list();
       t.assert.strictEqual(
         snapshot.find((e) => e.url === healthyUrl)?.status,
         "ok"
@@ -310,11 +324,12 @@ describe("oracle service", () => {
     t.assert.ok(healthyRequests >= 2, "expected at least two polls to occur");
     t.assert.ok(healthyHeaders.length >= 1, "expected signed headers");
 
+    const hubKeys = app.getDecorator<HubKeys>(kHubKeys);
     assertSignedHeaders(t, healthyHeaders[0], {
       url: "/api/health",
-      hubId: app.hubKeys.hubId,
-      keyId: app.hubKeys.current.kid,
-      publicKeyPem: app.hubKeys.current.publicKeyPem,
+      hubId: hubKeys.hubId,
+      keyId: hubKeys.current.kid,
+      publicKeyPem: hubKeys.current.publicKeyPem,
     });
 
     if (healthyHeaders.length >= 2) {
@@ -422,7 +437,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(async () => {
@@ -468,7 +483,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(async () => {
@@ -510,7 +525,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(async () => {
@@ -546,7 +561,7 @@ describe("oracle service", () => {
       markOraclesHealthy(app, ORACLE_URLS);
 
       const { mock: warnMock } = t.mock.method(app.log, "warn");
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(() =>
@@ -572,7 +587,7 @@ describe("oracle service", () => {
       markOraclesHealthy(app, ORACLE_URLS);
 
       const { mock: warnMock } = t.mock.method(app.log, "warn");
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(() =>
@@ -616,7 +631,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(async () => {
@@ -653,16 +668,17 @@ describe("oracle service", () => {
       const app = await withApp(t);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(() => ordersHeaders.length >= 1, 10_000);
 
+      const hubKeys = app.getDecorator<HubKeys>(kHubKeys);
       assertSignedHeaders(t, ordersHeaders[0], {
         url: "/api/orders",
-        hubId: app.hubKeys.hubId,
-        keyId: app.hubKeys.current.kid,
-        publicKeyPem: app.hubKeys.current.publicKeyPem,
+        hubId: hubKeys.hubId,
+        keyId: hubKeys.current.kid,
+        publicKeyPem: hubKeys.current.publicKeyPem,
       });
 
       await handle.stop();
@@ -694,7 +710,7 @@ describe("oracle service", () => {
       });
 
       const { mock: warnMock } = t.mock.method(app.log, "warn");
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(() =>
@@ -737,7 +753,7 @@ describe("oracle service", () => {
       updateMock.mockImplementation(async () => null);
 
       const { mock: warnMock } = t.mock.method(app.log, "warn");
-      const handle = app.oracleService.pollOrders();
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
       await waitFor(() =>

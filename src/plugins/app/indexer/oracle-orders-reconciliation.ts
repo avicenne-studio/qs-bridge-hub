@@ -7,13 +7,13 @@ import {
 
 type ReconcileFn = (orders: OracleOrder[]) => OracleOrder;
 
-declare module "fastify" {
-  interface FastifyInstance {
-    oracleOrdersReconciliatior: {
-      reconcile: ReconcileFn;
-    };
-  }
-}
+export type OracleOrdersReconciliatiorService = {
+  reconcile: ReconcileFn;
+};
+
+export const kOracleOrdersReconciliatior = Symbol(
+  "app.oracleOrdersReconciliatior"
+);
 
 function ensureIdenticalOrders(orders: OracleOrder[]) {
   if (orders.length === 0) {
@@ -76,7 +76,7 @@ export default fp(
       return { ...orders[0], status: consensusStatus };
     };
 
-    fastify.decorate("oracleOrdersReconciliatior", {
+    fastify.decorate(kOracleOrdersReconciliatior, {
       reconcile,
     });
   },

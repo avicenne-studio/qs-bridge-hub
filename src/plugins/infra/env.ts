@@ -1,19 +1,17 @@
 import env from '@fastify/env'
 import fp from 'fastify-plugin'
 
-declare module 'fastify' {
-  export interface FastifyInstance {
-    config: {
-      PORT: number;
-      HOST: string;
-      RATE_LIMIT_MAX: number;
-      SQLITE_DB_FILE: string;
-      ORACLE_URLS: string;
-      ORACLE_SIGNATURE_THRESHOLD: number;
-      HUB_KEYS_FILE: string;
-    };
-  }
-}
+export type AppConfig = {
+  PORT: number;
+  HOST: string;
+  RATE_LIMIT_MAX: number;
+  SQLITE_DB_FILE: string;
+  ORACLE_URLS: string;
+  ORACLE_SIGNATURE_THRESHOLD: number;
+  HUB_KEYS_FILE: string;
+};
+
+export const kConfig = 'config'
 
 const schema = {
   type: 'object',

@@ -13,6 +13,7 @@ import closeWithGrace from 'close-with-grace'
 
 // Import your application as a normal plugin.
 import serviceApp from './app.js'
+import { AppConfig, kConfig } from './plugins/infra/env.js'
 
 /**
  * Do not use NODE_ENV to determine what logger (or any env related feature) to use
@@ -66,8 +67,9 @@ async function init () {
   await app.ready()
 
   try {
+    const config = app.getDecorator<AppConfig>(kConfig)
     // Start listening.
-    await app.listen({ port: app.config.PORT, host: '0000' })
+    await app.listen({ port: config.PORT, host: config.HOST })
   } catch (err) {
     app.log.error(err)
     process.exit(1)

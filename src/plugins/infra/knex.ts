@@ -5,6 +5,7 @@ import {
   ORDERS_TABLE_NAME,
   ORDER_SIGNATURES_TABLE_NAME,
 } from "../app/indexer/orders.repository.js";
+import { AppConfig, kConfig } from "./env.js";
 
 export interface KnexAccessor {
   get(): Knex;
@@ -13,7 +14,8 @@ export interface KnexAccessor {
 export const kKnex = Symbol("infra.knex");
 
 export const autoConfig = (fastify: FastifyInstance): Knex.Config => {
-  const filename = fastify.config.SQLITE_DB_FILE;
+  const config = fastify.getDecorator<AppConfig>(kConfig);
+  const filename = config.SQLITE_DB_FILE;
 
   return {
     client: "better-sqlite3",

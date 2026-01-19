@@ -1,17 +1,30 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { PollerHandle, RECOMMENDED_POLLING_DEFAULTS } from "../infra/poller.js";
+import {
+  PollerHandle,
+  PollerService,
+  RECOMMENDED_POLLING_DEFAULTS,
+  kPoller,
+} from "../infra/poller.js";
 import { IdSchema, StringSchema } from "./common/schemas/common.js";
 import {
   formatFirstError,
   kValidation,
+  ValidationService,
 } from "./common/validator.js";
 import { OracleOrder, OracleOrderSchema } from "./indexer/schemas/order.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
 } from "./indexer/orders.repository.js";
+import {
+  OracleOrdersReconciliatiorService,
+  kOracleOrdersReconciliatior,
+} from "./indexer/oracle-orders-reconciliation.js";
+import { UndiciClientService, kUndiciClient } from "../infra/undici-client.js";
+import { HubSignerService, kHubSigner } from "../infra/hub-signer.js";
+import { AppConfig, kConfig } from "../infra/env.js";
 
 type OracleStatus = "ok" | "down";
 
@@ -46,6 +59,8 @@ export type OracleOrderWithSignature = OracleOrder & {
   id: string;
   signature: string;
 };
+
+export const kOracleService = Symbol("app.oracleService");
 
 const OracleOrderWithSignatureSchema = Type.Intersect([
   Type.Object({
@@ -94,12 +109,6 @@ function createOracleService(urls: string[]): OracleServiceCore {
   };
 }
 
-declare module "fastify" {
-  interface FastifyInstance {
-    oracleService: OracleService;
-  }
-}
-
 function parseOracleUrls(raw: string): string[] {
   return raw
     .split(",")
@@ -109,10 +118,10 @@ function parseOracleUrls(raw: string): string[] {
 
 function normalizeOrdersPayload(
   payload: unknown,
+  validation: ValidationService,
   fastify: FastifyInstance,
   server: string
 ): OracleOrderWithSignature[] {
-  const validation = fastify[kValidation];
   if (!validation.isValid<OracleOrdersPayload>(OracleOrdersPayloadSchema, payload)) {
     const reason = formatFirstError(OracleOrdersPayloadSchema, payload);
     fastify.log.warn(
@@ -142,15 +151,21 @@ export function groupOrdersById(
 function startHealthPolling(
   fastify: FastifyInstance,
   service: OracleService,
-  urls: string[]
+  urls: string[],
+  deps: {
+    undiciClient: UndiciClientService;
+    hubSigner: HubSignerService;
+    pollerService: PollerService;
+  }
 ) {
-  const client = fastify.undiciClient.create();
+  const { undiciClient, hubSigner, pollerService } = deps;
+  const client = undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
 
-  const poller = fastify.poller.create({
+  const poller = pollerService.create({
     servers: urls,
     fetchOne: async (server, signal) => {
-      const headers = fastify.hubSigner.signHeaders({
+      const headers = hubSigner.signHeaders({
         method: "GET",
         url: "/api/health",
       });
@@ -195,18 +210,34 @@ function startHealthPolling(
 function startOrdersPolling(
   fastify: FastifyInstance,
   service: OracleServiceCore,
-  urls: string[]
+  urls: string[],
+  deps: {
+    undiciClient: UndiciClientService;
+    hubSigner: HubSignerService;
+    pollerService: PollerService;
+    ordersRepository: OrdersRepository;
+    reconciliator: OracleOrdersReconciliatiorService;
+    validation: ValidationService;
+    config: AppConfig;
+  }
 ): PollerHandle {
-  const client = fastify.undiciClient.create();
-  const ordersRepository =
-    fastify.getDecorator<OrdersRepository>(kOrdersRepository);
+  const {
+    undiciClient,
+    hubSigner,
+    pollerService,
+    ordersRepository,
+    reconciliator,
+    validation,
+    config,
+  } = deps;
+  const client = undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
   const signatureThreshold = Math.max(
     1,
-    Math.floor(fastify.config.ORACLE_SIGNATURE_THRESHOLD)
+    Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
   );
 
-  const poller = fastify.poller.create<OracleOrderWithSignature[]>({
+  const poller = pollerService.create<OracleOrderWithSignature[]>({
     servers: urls,
     fetchOne: async (server, signal) => {
       const entry = service.list().find((item) => item.url === server);
@@ -214,7 +245,7 @@ function startOrdersPolling(
         return [];
       }
 
-      const headers = fastify.hubSigner.signHeaders({
+      const headers = hubSigner.signHeaders({
         method: "GET",
         url: "/api/orders",
       });
@@ -226,7 +257,7 @@ function startOrdersPolling(
           signal,
           headers
         );
-        return normalizeOrdersPayload(payload, fastify, server);
+        return normalizeOrdersPayload(payload, validation, fastify, server);
       } catch (err) {
         fastify.log.warn(
           { err, server },
@@ -251,8 +282,7 @@ function startOrdersPolling(
         );
 
         try {
-          const consensus =
-            fastify.oracleOrdersReconciliatior.reconcile(reconciledOrders);
+          const consensus = reconciliator.reconcile(reconciledOrders);
 
           const existing = await ordersRepository.findById(orderId);
           if (!existing) {
@@ -302,9 +332,28 @@ function startOrdersPolling(
 
 export default fp(
   async function oracleServicePlugin(fastify: FastifyInstance) {
-    const urls = parseOracleUrls(fastify.config.ORACLE_URLS);
+    const config = fastify.getDecorator<AppConfig>(kConfig);
+    const validation = fastify.getDecorator<ValidationService>(kValidation);
+    const undiciClient = fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    const hubSigner = fastify.getDecorator<HubSignerService>(kHubSigner);
+    const pollerService = fastify.getDecorator<PollerService>(kPoller);
+    const ordersRepository =
+      fastify.getDecorator<OrdersRepository>(kOrdersRepository);
+    const reconciliator =
+      fastify.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
+    const urls = parseOracleUrls(config.ORACLE_URLS);
     const serviceCore = createOracleService(urls);
-    const ordersPoller = startOrdersPolling(fastify, serviceCore, urls);
+    const ordersPoller = startOrdersPolling(fastify, serviceCore, urls, {
+      undiciClient,
+      hubSigner,
+      pollerService,
+      ordersRepository,
+      reconciliator,
+      validation,
+      config,
+    });
 
     const pollOrders = () => ordersPoller;
 
@@ -313,8 +362,12 @@ export default fp(
       pollOrders,
     };
 
-    fastify.decorate("oracleService", service);
-    startHealthPolling(fastify, service, urls);
+    fastify.decorate(kOracleService, service);
+    startHealthPolling(fastify, service, urls, {
+      undiciClient,
+      hubSigner,
+      pollerService,
+    });
   },
   {
     name: "oracle-service",

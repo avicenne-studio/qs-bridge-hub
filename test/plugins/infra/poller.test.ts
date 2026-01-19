@@ -2,12 +2,21 @@ import { describe, it, TestContext } from "node:test";
 import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import {
+  kPoller,
+  type PollerService,
+} from "../../../src/plugins/infra/poller.js";
+import {
+  kUndiciClient,
+  type UndiciClientService,
+} from "../../../src/plugins/infra/undici-client.js";
 
 const noop = () => {};
 
 describe("poller plugin", () => {
   it("collects only successful responses per round", async (t: TestContext) => {
     const app = await build(t);
+    const pollerService = app.getDecorator<PollerService>(kPoller);
 
     const servers = ["ok-1", "ok-2", "fail"] as const;
     const responsesByServer = new Map([
@@ -29,7 +38,7 @@ describe("poller plugin", () => {
       return value;
     };
 
-    const poller = app.poller.create({
+    const poller = pollerService.create({
       servers,
       fetchOne: (s: string) => fetchOne(s),
       onRound: (responses, context) => {
@@ -59,6 +68,7 @@ describe("poller plugin", () => {
 
   it("aborts slow servers and exposes defaults", async (t: TestContext) => {
     const app = await build(t);
+    const pollerService = app.getDecorator<PollerService>(kPoller);
 
     const abortedServers: string[] = [];
     const servers = ["slow", "fast"];
@@ -84,7 +94,7 @@ describe("poller plugin", () => {
       done = resolve;
     });
 
-    const poller = app.poller.create({
+    const poller = pollerService.create({
       servers,
       fetchOne,
       onRound: (responses) => {
@@ -107,8 +117,9 @@ describe("poller plugin", () => {
 
   it("throws when start is invoked twice", async (t: TestContext) => {
     const app = await build(t);
+    const pollerService = app.getDecorator<PollerService>(kPoller);
 
-    const poller = app.poller.create({
+    const poller = pollerService.create({
       servers: ["s1"],
       fetchOne: async () => "ok",
       onRound: noop,
@@ -126,6 +137,8 @@ describe("poller plugin", () => {
     "integrates with the Undici GET client transport across multiple servers",
     async (t: TestContext) => {
     const app = await build(t);
+    const pollerService = app.getDecorator<PollerService>(kPoller);
+    const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
     const fastState = { count: 0 };
     const fastServer = createServer((req, res) => {
@@ -164,7 +177,7 @@ describe("poller plugin", () => {
 
     type Response = { server: string; round: number };
 
-    const client = app.undiciClient.create();
+    const client = undiciClient.create();
     const observed: Response[][] = [];
 
     let done: (() => void) | null = null;
@@ -172,7 +185,7 @@ describe("poller plugin", () => {
       done = resolve;
     });
 
-    const poller = app.poller.create({
+    const poller = pollerService.create({
       servers: [
         `http://127.0.0.1:${fastAddr.port}`,
         `http://127.0.0.1:${failingAddr.port}`,

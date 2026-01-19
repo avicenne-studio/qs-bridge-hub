@@ -2,6 +2,10 @@ import { describe, it, TestContext } from "node:test";
 import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import {
+  kUndiciClient,
+  type UndiciClientService,
+} from "../../../src/plugins/infra/undici-client.js";
 
 describe("undici client plugin", () => {
   it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
@@ -28,7 +32,8 @@ describe("undici client plugin", () => {
     const { port } = server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;
 
-    const client = app.undiciClient.create({
+    const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
+    const client = undiciClient.create({
       headers: { "x-default": "base" },
     });
 
@@ -50,8 +55,9 @@ describe("undici client plugin", () => {
 
   it("closes created clients on app shutdown and exposes defaults", async (t: TestContext) => {
     const app = await build();
+    const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
-    t.assert.deepStrictEqual(app.undiciClient.defaults, {
+    t.assert.deepStrictEqual(undiciClient.defaults, {
       connectionsPerOrigin: 1,
       pipelining: 1,
       headers: {},
@@ -60,7 +66,7 @@ describe("undici client plugin", () => {
       connectTimeout: 5_000,
     });
 
-    const client = app.undiciClient.create();
+    const client = undiciClient.create();
     let closed = false;
     const originalClose = client.close.bind(client);
     client.close = async () => {

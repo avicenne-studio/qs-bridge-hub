@@ -4,11 +4,12 @@ import { build } from "../../helpers/build.js";
 import {
   formatFirstError,
   kValidation,
+  ValidationService,
 } from "../../../src/plugins/app/common/validator.js";
 
 test("validation service validates and asserts schema", async (t: TestContext) => {
   const app = await build(t);
-  const validation = app[kValidation];
+  const validation = app.getDecorator<ValidationService>(kValidation);
 
   const UserSchema = Type.Object({
     name: Type.String({ minLength: 1 }),

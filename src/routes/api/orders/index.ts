@@ -11,6 +11,7 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../plugins/app/indexer/orders.repository.js";
+import { AppConfig, kConfig } from "../../../plugins/infra/env.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -53,6 +54,7 @@ const RelayableSignaturesSchema = Type.Object({
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const ordersRepository =
     fastify.getDecorator<OrdersRepository>(kOrdersRepository);
+  const config = fastify.getDecorator<AppConfig>(kConfig);
   fastify.get(
     "/",
     {
@@ -102,7 +104,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     async function handler() {
       const threshold = Math.max(
         1,
-        Math.floor(fastify.config.ORACLE_SIGNATURE_THRESHOLD)
+        Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
       );
       const ids = await ordersRepository.findRelayableIds();
       const orders = await ordersRepository.findByIdsWithSignatures(ids);
