@@ -1,6 +1,6 @@
 import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
-import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import { groupOrdersById } from "../../../src/plugins/app/oracle-service.js";
 import type { OracleOrderWithSignature } from "../../../src/plugins/app/oracle-service.js";
@@ -20,16 +20,8 @@ const ORACLE_URLS = [
 
 type ResponseMode = "data" | "array" | "empty";
 
-const orderIds = new Map<number, string>();
-const makeId = (value: number) => {
-  const existing = orderIds.get(value);
-  if (existing) {
-    return existing;
-  }
-  const id = randomUUID();
-  orderIds.set(value, id);
-  return id;
-};
+const makeId = (value: number) =>
+  `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 
 function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
   return {

@@ -1,21 +1,12 @@
 import { it, describe, TestContext } from "node:test";
-import { randomUUID } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
 
-const orderIds = new Map<number, string>();
-const makeId = (value: number) => {
-  const existing = orderIds.get(value);
-  if (existing) {
-    return existing;
-  }
-  const id = randomUUID();
-  orderIds.set(value, id);
-  return id;
-};
+const makeId = (value: number) =>
+  `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 
 describe("ordersRepository", () => {
   it("should create and retrieve an order by id", async (t: TestContext) => {
