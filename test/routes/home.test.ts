@@ -8,6 +8,6 @@ test("GET /", async (t: TestContext) => {
   });
 
   t.assert.deepStrictEqual(JSON.parse(res.payload), {
-    message: "Welcome to the Qubic-Solana bridge oracle!",
+    message: "Welcome to the Qubic-Solana bridge Hub!",
   });
 });
