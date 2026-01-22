@@ -60,7 +60,19 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       const offset = (q.page - 1) * q.limit;
 
       const query = knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
+        .select(
+          "id",
+          "source",
+          "dest",
+          "from",
+          "to",
+          "amount",
+          "relayerFee",
+          "source_nonce",
+          "source_payload",
+          "oracle_accept_to_relay",
+          "status"
+        )
         .select(knex.raw("count(*) OVER() as total"));
 
       if (q.source !== undefined) {
@@ -90,7 +102,19 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
 
     async findById(id: string) {
       const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
+        .select(
+          "id",
+          "source",
+          "dest",
+          "from",
+          "to",
+          "amount",
+          "relayerFee",
+          "source_nonce",
+          "source_payload",
+          "oracle_accept_to_relay",
+          "status"
+        )
         .where("id", id)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
@@ -173,7 +197,19 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       }
 
       const orders = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
-        .select("id", "source", "dest", "from", "to", "amount", "relayerFee", "oracle_accept_to_relay", "status")
+        .select(
+          "id",
+          "source",
+          "dest",
+          "from",
+          "to",
+          "amount",
+          "relayerFee",
+          "source_nonce",
+          "source_payload",
+          "oracle_accept_to_relay",
+          "status"
+        )
         .whereIn("id", ids)
         .orderBy("id", "asc");
 

@@ -27,9 +27,9 @@ function ensureIdenticalOrders(orders: OracleOrder[]) {
       order.source !== first.source ||
       order.dest !== first.dest ||
       order.from !== first.from ||
-      order.to !== first.to ||
       order.amount !== first.amount ||
-      order.relayerFee !== first.relayerFee ||
+      order.source_nonce !== first.source_nonce ||
+      order.source_payload !== first.source_payload ||
       order.oracle_accept_to_relay !== first.oracle_accept_to_relay
     ) {
       throw new Error("Orders to reconcile must be identical");
@@ -67,13 +67,54 @@ function selectConsensusStatus(
   return winner;
 }
 
+function selectConsensusValue(values: string[], label: string): string {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  let winner: string | null = null;
+  let highest = 0;
+  let isTie = false;
+
+  for (const [value, count] of counts) {
+    if (count > highest) {
+      highest = count;
+      winner = value;
+      isTie = false;
+    } else if (count === highest) {
+      isTie = true;
+    }
+  }
+
+  if (winner === null || isTie) {
+    throw new Error(`Unable to compute a consensus ${label}`);
+  }
+
+  return winner;
+}
+
 export default fp(
   function (fastify: FastifyInstance) {
     const reconcile: ReconcileFn = (orders) => {
       ensureIdenticalOrders(orders);
 
       const consensusStatus = selectConsensusStatus(orders);
-      return { ...orders[0], status: consensusStatus };
+      const consensusTo = selectConsensusValue(
+        orders.map((order) => order.to),
+        "destination"
+      );
+      const consensusRelayerFee = selectConsensusValue(
+        orders.map((order) => order.relayerFee),
+        "relayer fee"
+      );
+
+      return {
+        ...orders[0],
+        to: consensusTo,
+        relayerFee: consensusRelayerFee,
+        status: consensusStatus,
+      };
     };
 
     fastify.decorate(kOracleOrdersReconciliatior, {

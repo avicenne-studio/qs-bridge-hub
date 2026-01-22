@@ -120,13 +120,15 @@ function normalizeOrdersPayload(
   payload: unknown,
   validation: ValidationService,
   fastify: FastifyInstance,
-  server: string
+  server: string,
 ): OracleOrderWithSignature[] {
-  if (!validation.isValid<OracleOrdersPayload>(OracleOrdersPayloadSchema, payload)) {
+  if (
+    !validation.isValid<OracleOrdersPayload>(OracleOrdersPayloadSchema, payload)
+  ) {
     const reason = formatFirstError(OracleOrdersPayloadSchema, payload);
     fastify.log.warn(
-      { reason, server },
-      "oracle orders poll returned invalid payload"
+      { reason, server, payload },
+      "oracle orders poll returned invalid payload",
     );
     return [];
   }
@@ -135,7 +137,7 @@ function normalizeOrdersPayload(
 }
 
 export function groupOrdersById(
-  orders: OracleOrderWithSignature[]
+  orders: OracleOrderWithSignature[],
 ): OracleOrderWithSignature[][] {
   const grouped = new Map<string, OracleOrderWithSignature[]>();
 
@@ -156,7 +158,7 @@ function startHealthPolling(
     undiciClient: UndiciClientService;
     hubSigner: HubSignerService;
     pollerService: PollerService;
-  }
+  },
 ) {
   const { undiciClient, hubSigner, pollerService } = deps;
   const client = undiciClient.create();
@@ -175,7 +177,7 @@ function startHealthPolling(
           server,
           "/api/health",
           signal,
-          headers
+          headers,
         );
         return {
           url: server,
@@ -184,7 +186,7 @@ function startHealthPolling(
       } catch (err) {
         fastify.log.warn(
           { err, server },
-          "oracle health poll failed; marking oracle as down"
+          "oracle health poll failed; marking oracle as down",
         );
         return {
           url: server,
@@ -219,7 +221,7 @@ function startOrdersPolling(
     reconciliator: OracleOrdersReconciliatiorService;
     validation: ValidationService;
     config: AppConfig;
-  }
+  },
 ): PollerHandle {
   const {
     undiciClient,
@@ -234,7 +236,7 @@ function startOrdersPolling(
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
   const signatureThreshold = Math.max(
     1,
-    Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
+    Math.floor(config.ORACLE_SIGNATURE_THRESHOLD),
   );
 
   const poller = pollerService.create<OracleOrderWithSignature[]>({
@@ -255,14 +257,11 @@ function startOrdersPolling(
           server,
           "/api/orders",
           signal,
-          headers
+          headers,
         );
         return normalizeOrdersPayload(payload, validation, fastify, server);
       } catch (err) {
-        fastify.log.warn(
-          { err, server },
-          "oracle orders poll failed"
-        );
+        fastify.log.warn({ err, server }, "oracle orders poll failed");
         return [];
       }
     },
@@ -278,7 +277,7 @@ function startOrdersPolling(
         const signatures = group.map((entry) => entry.signature);
         const reconciledOrders = group.map(
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          ({ signature: _signature, id: _id, ...order }) => order
+          ({ signature: _signature, id: _id, ...order }) => order,
         );
 
         try {
@@ -286,15 +285,16 @@ function startOrdersPolling(
 
           const existing = await ordersRepository.findById(orderId);
           if (!existing) {
-            fastify.log.warn(
-              { orderId },
-              "oracle orders poll skipped missing order"
-            );
-            continue;
+            await ordersRepository.create({
+              id: orderId,
+              ...consensus,
+            });
           }
 
-          const signatureCounts =
-            await ordersRepository.addSignatures(orderId, signatures);
+          const signatureCounts = await ordersRepository.addSignatures(
+            orderId,
+            signatures,
+          );
           const canBeRelayable = consensus.status !== "finalized";
           const meetsThreshold = signatureCounts.total >= signatureThreshold;
           const nextStatus =
@@ -304,19 +304,23 @@ function startOrdersPolling(
 
           const updated = await ordersRepository.update(orderId, {
             status: nextStatus,
+            to: consensus.to,
+            relayerFee: consensus.relayerFee,
           });
 
           if (!updated) {
             fastify.log.warn(
               { orderId },
-              "oracle orders poll skipped missing order"
+              "oracle orders poll skipped missing order",
             );
             continue;
           }
+
+          fastify.log.info({ orderId }, "oracle orders reconciliated");
         } catch (err) {
           fastify.log.warn(
             { err, orderId },
-            "oracle orders reconciliation failed"
+            "oracle orders reconciliation failed",
           );
         }
       }
@@ -334,14 +338,15 @@ export default fp(
   async function oracleServicePlugin(fastify: FastifyInstance) {
     const config = fastify.getDecorator<AppConfig>(kConfig);
     const validation = fastify.getDecorator<ValidationService>(kValidation);
-    const undiciClient = fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    const undiciClient =
+      fastify.getDecorator<UndiciClientService>(kUndiciClient);
     const hubSigner = fastify.getDecorator<HubSignerService>(kHubSigner);
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
     const ordersRepository =
       fastify.getDecorator<OrdersRepository>(kOrdersRepository);
     const reconciliator =
       fastify.getDecorator<OracleOrdersReconciliatiorService>(
-        kOracleOrdersReconciliatior
+        kOracleOrdersReconciliatior,
       );
     const urls = parseOracleUrls(config.ORACLE_URLS);
     const serviceCore = createOracleService(urls);
@@ -380,7 +385,7 @@ export default fp(
       "oracle-orders-reconciliation",
       "validation",
     ],
-  }
+  },
 );
 
 export { createOracleService, parseOracleUrls };

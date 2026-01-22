@@ -6,16 +6,18 @@ import {
   OracleChain,
   OracleOrderSchema,
 } from "../../../plugins/app/indexer/schemas/order.js";
-import { IdSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import {
+  IdSchema,
+  StringSchema,
+} from "../../../plugins/app/common/schemas/common.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../plugins/app/indexer/orders.repository.js";
-import { AppConfig, kConfig } from "../../../plugins/infra/env.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
-  { default: "desc" }
+  { default: "desc" },
 );
 
 const OrdersQueryParamsSchema = Type.Object({
@@ -54,7 +56,6 @@ const RelayableSignaturesSchema = Type.Object({
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const ordersRepository =
     fastify.getDecorator<OrdersRepository>(kOrdersRepository);
-  const config = fastify.getDecorator<AppConfig>(kConfig);
   fastify.get(
     "/",
     {
@@ -89,7 +90,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         fastify.log.error({ err: error }, "Failed to list orders");
         throw fastify.httpErrors.internalServerError("Failed to list orders");
       }
-    }
+    },
   );
 
   fastify.get(
@@ -102,25 +103,16 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      const threshold = Math.max(
-        1,
-        Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
-      );
       const ids = await ordersRepository.findRelayableIds();
       const orders = await ordersRepository.findByIdsWithSignatures(ids);
 
       return {
-        data: orders
-          .filter(
-            (order) =>
-              order.signatures.length >= threshold
-          )
-          .map((order) => ({
-            orderId: order.id,
-            signatures: order.signatures.map((signature) => signature.signature),
-          })),
+        data: orders.map((order) => ({
+          orderId: order.id,
+          signatures: order.signatures.map((signature) => signature.signature),
+        })),
       };
-    }
+    },
   );
 };
 
