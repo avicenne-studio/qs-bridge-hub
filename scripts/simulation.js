@@ -18,6 +18,7 @@ const FIXTURE_KEYS_FILE = resolve(
   "fixtures",
   "hub-keys.json"
 );
+const DEFAULT_SOLANA_WS_URL = "wss://api.devnet.solana.com";
 
 const hubs = [
   { id: "hub-1", port: 3010, role: "primary", up: true },
@@ -37,6 +38,8 @@ function startHub(hub) {
       SQLITE_DB_FILE: dbFile,
       ORACLE_URLS: DEFAULT_ORACLE_URLS,
       HUB_KEYS_FILE: FIXTURE_KEYS_FILE,
+      SOLANA_WS_URL: DEFAULT_SOLANA_WS_URL,
+      SOLANA_LISTENER_ENABLED: "true",
     },
   });
 
