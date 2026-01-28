@@ -16,7 +16,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       }
     },
     async function () {
-      return { message: 'Welcome to the Qubic-Solana bridge oracle!' }
+      return { message: 'Welcome to the Qubic-Solana bridge Hub!' }
     }
   )
 }

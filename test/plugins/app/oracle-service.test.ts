@@ -38,6 +38,8 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     to: "B",
     amount: "10",
     relayerFee: "1",
+    source_nonce: "nonce-1",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
@@ -425,6 +427,7 @@ describe("oracle service", () => {
       const ordersRepository = getOrdersRepository(app);
       markOraclesHealthy(app, ORACLE_URLS);
 
+      const { mock: infoMock } = t.mock.method(app.log, "info");
       const created = await ordersRepository.create({
         id: makeId(101),
         source: "solana",
@@ -433,6 +436,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-101",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -449,6 +454,13 @@ describe("oracle service", () => {
 
       const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "finalized");
+      t.assert.ok(
+        infoMock.calls.some(
+          (call) =>
+            call.arguments[1] === "oracle orders reconciliated" &&
+            call.arguments[0]?.orderId === created!.id
+        )
+      );
 
       const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
@@ -479,6 +491,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-151",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -521,6 +535,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-161",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -627,6 +643,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-1",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -705,6 +723,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-201",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -745,6 +765,8 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        source_nonce: "nonce-301",
+        source_payload: "{\"v\":1}",
         oracle_accept_to_relay: false,
         status: "pending",
       });

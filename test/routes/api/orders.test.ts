@@ -19,6 +19,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     to: "B",
     amount: "10",
     relayerFee: "1",
+    source_nonce: "nonce-401",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -30,6 +32,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     to: "D",
     amount: "25",
     relayerFee: "1",
+    source_nonce: "nonce-402",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -72,6 +76,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "B",
     amount: "10",
     relayerFee: "1",
+    source_nonce: "nonce-501",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
@@ -83,6 +89,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "D",
     amount: "20",
     relayerFee: "1",
+    source_nonce: "nonce-502",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -94,6 +102,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "F",
     amount: "30",
     relayerFee: "1",
+    source_nonce: "nonce-503",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });

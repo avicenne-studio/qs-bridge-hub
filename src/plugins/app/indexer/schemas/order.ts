@@ -22,6 +22,8 @@ export const OracleOrderSchema = Type.Object({
   to: StringSchema,
   amount: AmountSchema,
   relayerFee: AmountSchema,
+  source_nonce: StringSchema,
+  source_payload: Type.String({ minLength: 1, maxLength: 4096 }),
   oracle_accept_to_relay: Type.Boolean(),
   status: OracleOrderStatus,
 });
@@ -46,6 +48,8 @@ export function orderFromQubic(
     to: tx.recipient,
     amount: String(tx.amount),
     relayerFee: "0",
+    source_nonce: String(tx.nonce),
+    source_payload: JSON.stringify(tx),
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
@@ -66,6 +70,8 @@ export function orderFromSolana(
     to: decoded.to,
     amount: decoded.amount,
     relayerFee: "0",
+    source_nonce: tx.recentBlockhash,
+    source_payload: ix.data,
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
