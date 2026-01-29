@@ -232,10 +232,14 @@ function startOrdersPolling(
   } = deps;
   const client = undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
-  const signatureThreshold = Math.max(
-    1,
-    Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
-  );
+  const signatureThreshold = Math.max(0, config.ORACLE_SIGNATURE_THRESHOLD);
+  const totalOracles = () => Math.max(1, Math.floor(config.ORACLE_COUNT));
+  const requiredSignatures = () => {
+    if (signatureThreshold > 0 && signatureThreshold <= 1) {
+      return Math.max(1, Math.ceil(totalOracles() * signatureThreshold));
+    }
+    return Math.max(1, Math.floor(signatureThreshold));
+  };
 
   const poller = pollerService.create<OracleOrderWithSignature[]>({
     servers: urls,
@@ -296,7 +300,7 @@ function startOrdersPolling(
           const signatureCounts =
             await ordersRepository.addSignatures(orderId, signatures);
           const canBeRelayable = consensus.status !== "finalized";
-          const meetsThreshold = signatureCounts.total >= signatureThreshold;
+          const meetsThreshold = signatureCounts.total >= requiredSignatures();
           const nextStatus =
             meetsThreshold && canBeRelayable
               ? "ready-for-relay"

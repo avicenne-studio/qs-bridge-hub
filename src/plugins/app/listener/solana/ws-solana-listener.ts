@@ -61,6 +61,12 @@ export function extractErrorMetadata(event: unknown) {
   return { reason, code };
 }
 
+function isInboundProcessing(logs: string[]): boolean {
+  return logs.some((line) =>
+    line.includes("QS-BRIDGE: Processing inbound order")
+  );
+}
+
 export function createDefaultSolanaWsFactory(
   WebSocketCtor: typeof WebSocket = WebSocket
 ): WebSocketFactory {
@@ -157,6 +163,14 @@ export default fp(
         fastify.log.warn(
           { signature, err: parsed.value.err },
           "Solana logs notification has error"
+        );
+        return;
+      }
+
+      if (isInboundProcessing(parsed.value.logs)) {
+        fastify.log.info(
+          { signature, slot },
+          "Solana inbound transaction ignored"
         );
         return;
       }

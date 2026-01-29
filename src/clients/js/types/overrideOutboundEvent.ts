@@ -22,11 +22,13 @@ import {
   type ReadonlyUint8Array,
 } from "@solana/kit";
 
+
 export type OverrideOutboundEvent = {
   toAddress: ReadonlyUint8Array;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
 };
+
 
 export type OverrideOutboundEventArgs = {
   toAddress: ReadonlyUint8Array;

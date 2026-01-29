@@ -416,6 +416,30 @@ describe("ws solana listener plugin", () => {
     await app.close();
   });
 
+  it("skips inbound transactions", async () => {
+    const { app, ws, eventsRepository } = await buildListenerApp();
+
+    ws.emit("open", {});
+
+    const outboundBytes = createOutboundEventBytes();
+    const payload = createLogsNotification(
+      [
+        "Program log: QS-BRIDGE: Processing inbound order",
+        `Program data: ${Buffer.from(outboundBytes).toString("base64")}`,
+      ],
+      "sig-inbound",
+      42
+    );
+
+    ws.emit("message", { data: payload });
+
+    await waitFor(() => ws.sent.length > 0);
+
+    assert.strictEqual(eventsRepository.store.length, 0);
+
+    await app.close();
+  });
+
   it("logs missing signature and skips storage", async (t) => {
     const { app, ws, eventsRepository } = await buildListenerApp();
     const { mock: warnMock } = t.mock.method(app.log, "warn");
