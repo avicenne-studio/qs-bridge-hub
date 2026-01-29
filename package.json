@@ -69,7 +69,9 @@
     "allowScripts": {
       "@lavamoat/preinstall-always-fail": false,
       "better-sqlite3": true,
-      "tsx>esbuild": false
+      "tsx>esbuild": false,
+      "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>bufferutil": false,
+      "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>utf-8-validate": false
     }
   }
 }
