@@ -232,14 +232,11 @@ function startOrdersPolling(
   } = deps;
   const client = undiciClient.create();
   const defaults = RECOMMENDED_POLLING_DEFAULTS;
-  const signatureThreshold = Math.max(0, config.ORACLE_SIGNATURE_THRESHOLD);
-  const totalOracles = () => Math.max(1, Math.floor(config.ORACLE_COUNT));
-  const requiredSignatures = () => {
-    if (signatureThreshold > 0 && signatureThreshold <= 1) {
-      return Math.max(1, Math.ceil(totalOracles() * signatureThreshold));
-    }
-    return Math.max(1, Math.floor(signatureThreshold));
-  };
+  const requiredSignatures = () =>
+    computeRequiredSignatures(
+      config.ORACLE_SIGNATURE_THRESHOLD,
+      config.ORACLE_COUNT
+    );
 
   const poller = pollerService.create<OracleOrderWithSignature[]>({
     servers: urls,
@@ -386,5 +383,17 @@ export default fp(
     ],
   }
 );
+
+export function computeRequiredSignatures(
+  signatureThreshold: number,
+  oracleCount: number
+) {
+  const threshold = Math.max(0, signatureThreshold);
+  const total = Math.max(1, Math.floor(oracleCount));
+  if (threshold > 0 && threshold <= 1) {
+    return Math.max(1, Math.ceil(total * threshold));
+  }
+  return Math.max(1, Math.floor(threshold));
+}
 
 export { createOracleService, parseOracleUrls };

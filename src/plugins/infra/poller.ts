@@ -37,7 +37,7 @@ export type PollerHandle = {
 
 export const RECOMMENDED_POLLING_DEFAULTS: Readonly<PollerOptions> =
   Object.freeze({
-    intervalMs: 10_000,
+    intervalMs: 3000,
     requestTimeoutMs: 700,
     jitterMs: 25,
   });
