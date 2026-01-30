@@ -34,14 +34,14 @@ import {
   type WritableAccount,
   type WritableSignerAccount,
 } from "@solana/kit";
-import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs";
-import { getAccountMetaFactory, type ResolvedAccount } from "../shared";
+import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs/index.js";
+import { getAccountMetaFactory, type ResolvedAccount } from "../shared/index.js";
 import {
   getOrderDataDecoder,
   getOrderDataEncoder,
   type OrderData,
   type OrderDataArgs,
-} from "../types";
+} from "../types/index.js";
 
 export const INBOUND_DISCRIMINATOR = 9;
 

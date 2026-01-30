@@ -36,7 +36,7 @@ import {
   type MaybeAccount,
   type MaybeEncodedAccount,
 } from "@solana/kit";
-import { getKeyDecoder, getKeyEncoder, type Key, type KeyArgs } from "../types";
+import { getKeyDecoder, getKeyEncoder, type Key, type KeyArgs } from "../types/index.js";
 
 export type GlobalState = {
   key: Key;

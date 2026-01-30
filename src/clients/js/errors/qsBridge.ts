@@ -12,7 +12,7 @@ import {
   type SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
   type SolanaError,
 } from "@solana/kit";
-import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs";
+import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs/index.js";
 
 /** ProgramPaused: Program is paused */
 export const QS_BRIDGE_ERROR__PROGRAM_PAUSED = 0x0; // 0

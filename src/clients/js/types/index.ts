@@ -6,9 +6,9 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./domain";
-export * from "./inboundEvent";
-export * from "./key";
-export * from "./orderData";
-export * from "./outboundEvent";
-export * from "./overrideOutboundEvent";
+export * from "./domain.js";
+export * from "./inboundEvent.js";
+export * from "./key.js";
+export * from "./orderData.js";
+export * from "./outboundEvent.js";
+export * from "./overrideOutboundEvent.js";

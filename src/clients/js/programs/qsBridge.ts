@@ -25,7 +25,7 @@ import {
   type ParsedRemoveOracleInstruction,
   type ParsedRemovePauserInstruction,
   type ParsedUnpauseInstruction,
-} from "../instructions";
+} from "../instructions/index.js";
 
 export const QS_BRIDGE_PROGRAM_ADDRESS =
   "qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H" as Address<"qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H">;
