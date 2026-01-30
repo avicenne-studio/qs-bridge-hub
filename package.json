@@ -43,6 +43,7 @@
     "@fastify/swagger-ui": "^5.2.3",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@sinclair/typebox": "^0.34.45",
+    "@solana/kit": "^5.3.0",
     "better-sqlite3": "^12.5.0",
     "close-with-grace": "^2.4.0",
     "concurrently": "^9.2.1",
@@ -68,7 +69,9 @@
     "allowScripts": {
       "@lavamoat/preinstall-always-fail": false,
       "better-sqlite3": true,
-      "tsx>esbuild": false
+      "tsx>esbuild": false,
+      "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>bufferutil": false,
+      "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>utf-8-validate": false
     }
   }
 }

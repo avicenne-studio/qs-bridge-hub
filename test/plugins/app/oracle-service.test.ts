@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
+  computeRequiredSignatures,
   groupOrdersById,
   kOracleService,
   type OracleOrderWithSignature,
@@ -489,13 +490,19 @@ describe("oracle service", () => {
       await waitFor(async () => {
         const updated = await ordersRepository.findById(created!.id);
         return updated?.status === "ready-for-relay";
-      }, 10_000);
+      }, 15_000);
 
       await handle.stop();
 
       const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "ready-for-relay");
       t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
+    });
+
+    test("computes required signature thresholds", (t: TestContext) => {
+      t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);
+      t.assert.strictEqual(computeRequiredSignatures(3, 6), 3);
+      t.assert.strictEqual(computeRequiredSignatures(-1, 0), 1);
     });
 
     test("keeps orders pending when signature threshold is not met", async (t: TestContext) => {

@@ -8,7 +8,10 @@ export type AppConfig = {
   SQLITE_DB_FILE: string;
   ORACLE_URLS: string;
   ORACLE_SIGNATURE_THRESHOLD: number;
+  ORACLE_COUNT: number;
   HUB_KEYS_FILE: string;
+  SOLANA_WS_URL: string;
+  SOLANA_LISTENER_ENABLED: boolean;
 };
 
 export const kConfig = 'config'
@@ -21,7 +24,10 @@ const schema = {
     'HOST',
     'ORACLE_URLS',
     'ORACLE_SIGNATURE_THRESHOLD',
-    'HUB_KEYS_FILE'
+    'HUB_KEYS_FILE',
+    'ORACLE_COUNT',
+    'SOLANA_WS_URL',
+    'SOLANA_LISTENER_ENABLED'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -45,12 +51,24 @@ const schema = {
     },
     ORACLE_SIGNATURE_THRESHOLD: {
       type: 'number',
+      minimum: 0.1,
+      default: 0.6
+    },
+    ORACLE_COUNT: {
+      type: 'number',
       minimum: 1,
-      default: 2
+      default: 6
     },
     HUB_KEYS_FILE: {
       type: 'string',
     },
+    SOLANA_WS_URL: {
+      type: 'string',
+    },
+    SOLANA_LISTENER_ENABLED: {
+      type: 'boolean',
+      default: true
+    }
   }
 }
 
