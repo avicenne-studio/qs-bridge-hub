@@ -18,6 +18,8 @@ import {
   getU32Encoder,
   getU64Decoder,
   getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type FixedSizeCodec,
   type FixedSizeDecoder,
   type FixedSizeEncoder,
@@ -25,6 +27,7 @@ import {
 } from "@solana/kit";
 
 export type OutboundEvent = {
+  discriminator: number;
   networkIn: number;
   networkOut: number;
   tokenIn: ReadonlyUint8Array;
@@ -37,6 +40,7 @@ export type OutboundEvent = {
 };
 
 export type OutboundEventArgs = {
+  discriminator: number;
   networkIn: number;
   networkOut: number;
   tokenIn: ReadonlyUint8Array;
@@ -50,6 +54,7 @@ export type OutboundEventArgs = {
 
 export function getOutboundEventEncoder(): FixedSizeEncoder<OutboundEventArgs> {
   return getStructEncoder([
+    ["discriminator", getU8Encoder()],
     ["networkIn", getU32Encoder()],
     ["networkOut", getU32Encoder()],
     ["tokenIn", fixEncoderSize(getBytesEncoder(), 32)],
@@ -64,6 +69,7 @@ export function getOutboundEventEncoder(): FixedSizeEncoder<OutboundEventArgs> {
 
 export function getOutboundEventDecoder(): FixedSizeDecoder<OutboundEvent> {
   return getStructDecoder([
+    ["discriminator", getU8Decoder()],
     ["networkIn", getU32Decoder()],
     ["networkOut", getU32Decoder()],
     ["tokenIn", fixDecoderSize(getBytesDecoder(), 32)],

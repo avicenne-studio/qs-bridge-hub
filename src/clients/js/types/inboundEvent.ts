@@ -18,14 +18,16 @@ import {
   getU32Encoder,
   getU64Decoder,
   getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type FixedSizeCodec,
   type FixedSizeDecoder,
   type FixedSizeEncoder,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 
-
 export type InboundEvent = {
+  discriminator: number;
   networkIn: number;
   networkOut: number;
   tokenIn: ReadonlyUint8Array;
@@ -37,8 +39,8 @@ export type InboundEvent = {
   nonce: ReadonlyUint8Array;
 };
 
-
 export type InboundEventArgs = {
+  discriminator: number;
   networkIn: number;
   networkOut: number;
   tokenIn: ReadonlyUint8Array;
@@ -52,6 +54,7 @@ export type InboundEventArgs = {
 
 export function getInboundEventEncoder(): FixedSizeEncoder<InboundEventArgs> {
   return getStructEncoder([
+    ["discriminator", getU8Encoder()],
     ["networkIn", getU32Encoder()],
     ["networkOut", getU32Encoder()],
     ["tokenIn", fixEncoderSize(getBytesEncoder(), 32)],
@@ -66,6 +69,7 @@ export function getInboundEventEncoder(): FixedSizeEncoder<InboundEventArgs> {
 
 export function getInboundEventDecoder(): FixedSizeDecoder<InboundEvent> {
   return getStructDecoder([
+    ["discriminator", getU8Decoder()],
     ["networkIn", getU32Decoder()],
     ["networkOut", getU32Decoder()],
     ["tokenIn", fixDecoderSize(getBytesDecoder(), 32)],

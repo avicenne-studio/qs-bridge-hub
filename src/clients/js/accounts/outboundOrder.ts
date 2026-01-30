@@ -37,7 +37,7 @@ import {
   type MaybeEncodedAccount,
   type ReadonlyUint8Array,
 } from "@solana/kit";
-import { getKeyDecoder, getKeyEncoder, type Key, type KeyArgs } from "../types/index.js";
+import { getKeyDecoder, getKeyEncoder, type Key, type KeyArgs } from "../types";
 
 export type OutboundOrder = {
   key: Key;

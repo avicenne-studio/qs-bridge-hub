@@ -61,12 +61,6 @@ export function extractErrorMetadata(event: unknown) {
   return { reason, code };
 }
 
-function isInboundProcessing(logs: string[]): boolean {
-  return logs.some((line) =>
-    line.includes("QS-BRIDGE: Processing inbound order")
-  );
-}
-
 export function createDefaultSolanaWsFactory(
   WebSocketCtor: typeof WebSocket = WebSocket
 ): WebSocketFactory {
@@ -167,14 +161,6 @@ export default fp(
         return;
       }
 
-      if (isInboundProcessing(parsed.value.logs)) {
-        fastify.log.info(
-          { signature, slot },
-          "Solana inbound transaction ignored"
-        );
-        return;
-      }
-
       const dataLogs = logLinesToEvents(parsed.value.logs);
       fastify.log.debug(
         { signature, dataLogCount: dataLogs.length },
@@ -192,6 +178,14 @@ export default fp(
               );
             }
           }
+          continue;
+        }
+
+        if (decoded.type === "inbound") {
+          fastify.log.info(
+            { signature, slot },
+            "Solana inbound event ignored"
+          );
           continue;
         }
 

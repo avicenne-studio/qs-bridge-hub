@@ -11,6 +11,7 @@ import wsSolanaListener, {
   resolveSolanaWsFactory,
 } from "../../../../src/plugins/app/listener/solana/ws-solana-listener.js";
 import { waitFor } from "../../../helpers/wait-for.js";
+import { getInboundEventEncoder } from "../../../../src/clients/js/types/inboundEvent.js";
 import { getOutboundEventEncoder } from "../../../../src/clients/js/types/outboundEvent.js";
 import { getOverrideOutboundEventEncoder } from "../../../../src/clients/js/types/overrideOutboundEvent.js";
 import { kConfig } from "../../../../src/plugins/infra/env.js";
@@ -88,6 +89,7 @@ function createOutboundEventBytes() {
   nonce[31] = 1;
   return new Uint8Array(
     encoder.encode({
+      discriminator: 1,
       networkIn: 1,
       networkOut: 1,
       tokenIn: new Uint8Array(32).fill(1),
@@ -107,8 +109,29 @@ function createOverrideEventBytes() {
   nonce[31] = 1;
   return new Uint8Array(
     encoder.encode({
+      discriminator: 2,
       toAddress: new Uint8Array(32).fill(9),
       relayerFee: 7n,
+      nonce,
+    })
+  );
+}
+
+function createInboundEventBytes() {
+  const encoder = getInboundEventEncoder();
+  const nonce = new Uint8Array(32);
+  nonce[31] = 1;
+  return new Uint8Array(
+    encoder.encode({
+      discriminator: 0,
+      networkIn: 1,
+      networkOut: 2,
+      tokenIn: new Uint8Array(32).fill(1),
+      tokenOut: new Uint8Array(32).fill(2),
+      fromAddress: new Uint8Array(32).fill(3),
+      toAddress: new Uint8Array(32).fill(4),
+      amount: 10n,
+      relayerFee: 2n,
       nonce,
     })
   );
@@ -421,11 +444,10 @@ describe("ws solana listener plugin", () => {
 
     ws.emit("open", {});
 
-    const outboundBytes = createOutboundEventBytes();
+    const inboundBytes = createInboundEventBytes();
     const payload = createLogsNotification(
       [
-        "Program log: QS-BRIDGE: Processing inbound order",
-        `Program data: ${Buffer.from(outboundBytes).toString("base64")}`,
+        `Program data: ${Buffer.from(inboundBytes).toString("base64")}`,
       ],
       "sig-inbound",
       42

@@ -16,21 +16,23 @@ import {
   getStructEncoder,
   getU64Decoder,
   getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   type FixedSizeCodec,
   type FixedSizeDecoder,
   type FixedSizeEncoder,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 
-
 export type OverrideOutboundEvent = {
+  discriminator: number;
   toAddress: ReadonlyUint8Array;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
 };
 
-
 export type OverrideOutboundEventArgs = {
+  discriminator: number;
   toAddress: ReadonlyUint8Array;
   relayerFee: number | bigint;
   nonce: ReadonlyUint8Array;
@@ -38,6 +40,7 @@ export type OverrideOutboundEventArgs = {
 
 export function getOverrideOutboundEventEncoder(): FixedSizeEncoder<OverrideOutboundEventArgs> {
   return getStructEncoder([
+    ["discriminator", getU8Encoder()],
     ["toAddress", fixEncoderSize(getBytesEncoder(), 32)],
     ["relayerFee", getU64Encoder()],
     ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
@@ -46,6 +49,7 @@ export function getOverrideOutboundEventEncoder(): FixedSizeEncoder<OverrideOutb
 
 export function getOverrideOutboundEventDecoder(): FixedSizeDecoder<OverrideOutboundEvent> {
   return getStructDecoder([
+    ["discriminator", getU8Decoder()],
     ["toAddress", fixDecoderSize(getBytesDecoder(), 32)],
     ["relayerFee", getU64Decoder()],
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],

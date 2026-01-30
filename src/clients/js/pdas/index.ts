@@ -6,8 +6,8 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./globalState.js";
-export * from "./inboundOrder.js";
-export * from "./oracle.js";
-export * from "./outboundOrder.js";
-export * from "./pauser.js";
+export * from "./globalState";
+export * from "./inboundOrder";
+export * from "./oracle";
+export * from "./outboundOrder";
+export * from "./pauser";

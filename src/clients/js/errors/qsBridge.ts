@@ -12,7 +12,7 @@ import {
   type SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
   type SolanaError,
 } from "@solana/kit";
-import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs/index.js";
+import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs";
 
 /** ProgramPaused: Program is paused */
 export const QS_BRIDGE_ERROR__PROGRAM_PAUSED = 0x0; // 0
@@ -24,9 +24,15 @@ export const QS_BRIDGE_ERROR__UNSUPPORTED_OUT_TOKEN = 0x2; // 2
 export const QS_BRIDGE_ERROR__ORACLE_HAS_CLAIMABLE_BALANCE = 0x3; // 3
 /** InvalidNumberOfSignatures: Invalid number of signatures */
 export const QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES = 0x4; // 4
+/** DuplicateOracleSignature: Duplicate oracle signature detected */
+export const QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE = 0x5; // 5
+/** InvalidRelayerFee: Invalid relayer fee */
+export const QS_BRIDGE_ERROR__INVALID_RELAYER_FEE = 0x6; // 6
 
 export type QsBridgeError =
+  | typeof QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE
   | typeof QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES
+  | typeof QS_BRIDGE_ERROR__INVALID_RELAYER_FEE
   | typeof QS_BRIDGE_ERROR__ORACLE_HAS_CLAIMABLE_BALANCE
   | typeof QS_BRIDGE_ERROR__PROGRAM_PAUSED
   | typeof QS_BRIDGE_ERROR__UNSUPPORTED_NETWORK
@@ -35,7 +41,9 @@ export type QsBridgeError =
 let qsBridgeErrorMessages: Record<QsBridgeError, string> | undefined;
 if (process.env.NODE_ENV !== "production") {
   qsBridgeErrorMessages = {
+    [QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE]: `Duplicate oracle signature detected`,
     [QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES]: `Invalid number of signatures`,
+    [QS_BRIDGE_ERROR__INVALID_RELAYER_FEE]: `Invalid relayer fee`,
     [QS_BRIDGE_ERROR__ORACLE_HAS_CLAIMABLE_BALANCE]: `Oracle has claimable balance`,
     [QS_BRIDGE_ERROR__PROGRAM_PAUSED]: `Program is paused`,
     [QS_BRIDGE_ERROR__UNSUPPORTED_NETWORK]: `Unsupported network`,
