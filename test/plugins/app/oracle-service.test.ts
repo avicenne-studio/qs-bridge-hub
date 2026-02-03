@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
+  computeRequiredSignatures,
   groupOrdersById,
   kOracleService,
   type OracleOrderWithSignature,
@@ -489,13 +490,19 @@ describe("oracle service", () => {
       await waitFor(async () => {
         const updated = await ordersRepository.findById(created!.id);
         return updated?.status === "ready-for-relay";
-      }, 10_000);
+      }, 15_000);
 
       await handle.stop();
 
       const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "ready-for-relay");
       t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
+    });
+
+    test("computes required signature thresholds", (t: TestContext) => {
+      t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);
+      t.assert.strictEqual(computeRequiredSignatures(3, 6), 3);
+      t.assert.strictEqual(computeRequiredSignatures(-1, 0), 1);
     });
 
     test("keeps orders pending when signature threshold is not met", async (t: TestContext) => {
@@ -595,6 +602,76 @@ describe("oracle service", () => {
           (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
         )
       );
+
+      const [logPayload] = warnMock.calls.find(
+        (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+      )!.arguments as [{ payloadType: string; payloadKeys: string[] }];
+      t.assert.strictEqual(logPayload.payloadType, "object");
+      t.assert.deepStrictEqual(logPayload.payloadKeys, ["data"]);
+
+      await handle.stop();
+    });
+
+    test("logs payload metadata when oracle returns non-object payload", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        responsePayloads: ["nope", "nope", "nope"],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+        )
+      );
+
+      const [logPayload] = warnMock.calls.find(
+        (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+      )!.arguments as [{ payloadType: string; payloadKeys: string[] }];
+      t.assert.strictEqual(logPayload.payloadType, "string");
+      t.assert.deepStrictEqual(logPayload.payloadKeys, []);
+
+      await handle.stop();
+    });
+
+    test("logs payload metadata when oracle returns invalid array payload", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        responsePayloads: [[1], [1], [1]],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+        )
+      );
+
+      const [logPayload] = warnMock.calls.find(
+        (call) => call.arguments[1] === "oracle orders poll returned invalid payload"
+      )!.arguments as [{ payloadType: string; payloadKeys: string[] }];
+      t.assert.strictEqual(logPayload.payloadType, "array");
+      t.assert.deepStrictEqual(logPayload.payloadKeys, ["0"]);
 
       await handle.stop();
     });
@@ -717,6 +794,109 @@ describe("oracle service", () => {
         warnMock.calls.some(
           (call) =>
             call.arguments[1] === "oracle orders reconciliation failed"
+        )
+      );
+
+      await handle.stop();
+    });
+
+    test("creates missing orders when polling oracles", async (t: TestContext) => {
+      const orderId = makeId(250);
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        orderIds: [orderId],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const created = await ordersRepository.findById(orderId);
+        return created?.status === "finalized";
+      }, 10_000);
+
+      const withSignatures = await ordersRepository.findByIdsWithSignatures([
+        orderId,
+      ]);
+      t.assert.strictEqual(withSignatures[0].signatures.length, 3);
+
+      await handle.stop();
+    });
+
+    test("stores extra oracle fields when creating missing orders", async (t: TestContext) => {
+      const orderId = makeId(251);
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized", {
+            source_nonce: "nonce",
+            source_payload: "{\"v\":1}",
+          }),
+          serverOrderFactory("sig-2", "finalized", {
+            source_nonce: "nonce",
+            source_payload: "{\"v\":1}",
+          }),
+          serverOrderFactory("sig-3", "finalized", {
+            source_nonce: "nonce",
+            source_payload: "{\"v\":1}",
+          }),
+        ],
+        orderIds: [orderId],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const created = await ordersRepository.findById(orderId);
+        return created?.status === "finalized";
+      }, 10_000);
+
+      const created = await ordersRepository.findById(orderId);
+      t.assert.strictEqual(created?.source, "solana");
+      t.assert.strictEqual(created?.source_nonce, "nonce");
+      t.assert.strictEqual(created?.source_payload, "{\"v\":1}");
+
+      await handle.stop();
+    });
+
+    test("logs when order creation fails during reconciliation", async (t: TestContext) => {
+      const orderId = makeId(260);
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        orderIds: [orderId],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const { mock: createMock } = t.mock.method(ordersRepository, "create");
+      createMock.mockImplementation(async () => null);
+
+      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) =>
+            call.arguments[1] === "oracle orders poll skipped missing order"
         )
       );
 

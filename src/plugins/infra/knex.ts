@@ -5,6 +5,7 @@ import {
   ORDERS_TABLE_NAME,
   ORDER_SIGNATURES_TABLE_NAME,
 } from "../app/indexer/orders.repository.js";
+import { EVENTS_TABLE_NAME } from "../app/events/events.repository.js";
 import { AppConfig, kConfig } from "./env.js";
 
 export interface KnexAccessor {
@@ -51,11 +52,13 @@ export default fp(
           table.string("to").notNullable();
           table.string("amount").notNullable();
           table.string("relayerFee").notNullable().defaultTo("0");
+          table.string("source_nonce").nullable();
+          table.text("source_payload").nullable();
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
       }
-
+      
       const hasSignaturesTable = await db.schema.hasTable(
         ORDER_SIGNATURES_TABLE_NAME
       );
@@ -69,6 +72,24 @@ export default fp(
             table.unique(["order_id", "signature"]);
           }
         );
+      }
+
+      const hasEventsTable = await db.schema.hasTable(EVENTS_TABLE_NAME);
+      if (!hasEventsTable) {
+        await db.schema.createTable(EVENTS_TABLE_NAME, (table) => {
+          table.increments("id");
+          table.string("signature").notNullable();
+          table.integer("slot").nullable();
+          table.string("chain").notNullable();
+          table.string("type").notNullable();
+          table.string("nonce").notNullable();
+          table.text("payload").notNullable();
+          table
+            .timestamp("created_at", { useTz: false })
+            .notNullable()
+            .defaultTo(db.fn.now());
+          table.unique(["signature", "type", "nonce"]);
+        });
       }
     });
   },

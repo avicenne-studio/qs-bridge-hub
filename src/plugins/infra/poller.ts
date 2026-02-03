@@ -1,5 +1,6 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
+import { AppConfig, kConfig } from "./env.js";
 
 export type Fetcher<TResponse> = (
   server: string,
@@ -35,14 +36,8 @@ export type PollerHandle = {
   isRunning(): boolean;
 };
 
-export const RECOMMENDED_POLLING_DEFAULTS: Readonly<PollerOptions> =
-  Object.freeze({
-    intervalMs: 3000,
-    requestTimeoutMs: 700,
-    jitterMs: 25,
-  });
-
 export type PollerService = {
+  defaults: Readonly<PollerOptions>;
   create<TResponse>(config: CreatePollerConfig<TResponse>): PollerHandle;
 };
 
@@ -147,9 +142,16 @@ function createPoller<TResponse>(
 
 export default fp(
   function pollingPlugin(fastify: FastifyInstance) {
+    const config = fastify.getDecorator<AppConfig>(kConfig);
+    const defaults: Readonly<PollerOptions> = Object.freeze({
+      intervalMs: config.POLLER_INTERVAL_MS,
+      requestTimeoutMs: 700,
+      jitterMs: 25,
+    });
     const handles = new Set<PollerHandle>();
 
     fastify.decorate(kPoller, {
+      defaults,
       create<TResponse>(config: CreatePollerConfig<TResponse>) {
         const handle = createPoller(config);
         handles.add(handle);

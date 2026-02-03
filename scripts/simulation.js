@@ -3,14 +3,17 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import os from "node:os";
 import process from "node:process";
+import dotenv from "dotenv";
 
 const ROOT_DIR = resolve(import.meta.dirname, "..");
+dotenv.config({ path: join(ROOT_DIR, ".env.local") });
+dotenv.config({ path: join(ROOT_DIR, ".env") });
 const tmpRoot = join(os.tmpdir(), "hub-sim");
 rmSync(tmpRoot, { recursive: true, force: true });
 mkdirSync(tmpRoot, { recursive: true });
 
 const DEFAULT_ORACLE_URLS =
-  "http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003";
+  "http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004,http://127.0.0.1:3005";
 
 const FIXTURE_KEYS_FILE = resolve(
   ROOT_DIR,
@@ -18,6 +21,8 @@ const FIXTURE_KEYS_FILE = resolve(
   "fixtures",
   "hub-keys.json"
 );
+const DEFAULT_SOLANA_WS_URL = "wss://api.devnet.solana.com";
+const DEFAULT_SOLANA_RPC_URL = "https://api.devnet.solana.com";
 
 const hubs = [
   { id: "hub-1", port: 3010, role: "primary", up: true },
@@ -37,6 +42,9 @@ function startHub(hub) {
       SQLITE_DB_FILE: dbFile,
       ORACLE_URLS: DEFAULT_ORACLE_URLS,
       HUB_KEYS_FILE: FIXTURE_KEYS_FILE,
+      SOLANA_WS_URL: process.env.SOLANA_WS_URL ?? DEFAULT_SOLANA_WS_URL,
+      SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ?? DEFAULT_SOLANA_RPC_URL,
+      SOLANA_LISTENER_ENABLED: "true",
     },
   });
 

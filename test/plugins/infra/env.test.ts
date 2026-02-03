@@ -16,6 +16,8 @@ test("rejects invalid ORACLE_URLS entries", async (t: TestContext) => {
       ORACLE_URLS: "https://ok.example,ftp://bad.example",
       ORACLE_SIGNATURE_THRESHOLD: 2,
       HUB_KEYS_FILE: "./test/fixtures/hub-keys.json",
+      SOLANA_WS_URL: "ws://localhost:8900",
+      SOLANA_LISTENER_ENABLED: false,
     },
   });
 

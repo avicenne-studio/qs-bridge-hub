@@ -38,6 +38,7 @@
   - `test/routes/api` hosts HTTP-level tests; `orders.test.ts` seeds the test DB via the repository and asserts pagination + error logging flows as well as the placeholder `/api/orders/signatures` response, while `health.test.ts` ensures the public endpoints mirror `fastify.oraclesHealth`.
 - Tests use Node's `node:test` `TestContext` assertions (`t.assert.*`) rather than importing `assert` directly, keeping the helper utilities minimal.
 - Never import `node:assert` in tests—always call assertions through `t.assert.*` on the provided `TestContext` so failures are scoped correctly.
+- Never access `process.env` directly in application tests, and never assign values to it in tests. Use `.env.test` and Fastify config instead.
 - `test/helper.ts` exposes `build()` which spins up a Fastify instance with the full plugin stack (using `node:test` contexts for lifecycle management). `npm run test` invokes `tsx --test` through `c8` for coverage.
 - **Coverage mandate:** keep the suite at 100% statement/branch/function coverage. When adding a feature, budget time to extend or add tests before merging; coverage gates should fail the CI if the threshold drops.
 
