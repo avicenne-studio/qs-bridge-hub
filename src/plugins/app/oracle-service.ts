@@ -4,7 +4,6 @@ import { Type } from "@sinclair/typebox";
 import {
   PollerHandle,
   PollerService,
-  RECOMMENDED_POLLING_DEFAULTS,
   kPoller,
 } from "../infra/poller.js";
 import { IdSchema, StringSchema } from "./common/schemas/common.js";
@@ -123,9 +122,14 @@ function normalizeOrdersPayload(
   server: string
 ): OracleOrderWithSignature[] {
   if (!validation.isValid<OracleOrdersPayload>(OracleOrdersPayloadSchema, payload)) {
+    const payloadType = Array.isArray(payload) ? "array" : typeof payload;
+    const payloadKeys =
+      payload && typeof payload === "object"
+        ? Object.keys(payload as Record<string, unknown>).slice(0, 8)
+        : [];
     const reason = formatFirstError(OracleOrdersPayloadSchema, payload);
     fastify.log.warn(
-      { reason, server },
+      { reason, server, payloadType, payloadKeys },
       "oracle orders poll returned invalid payload"
     );
     return [];
@@ -160,7 +164,7 @@ function startHealthPolling(
 ) {
   const { undiciClient, hubSigner, pollerService } = deps;
   const client = undiciClient.create();
-  const defaults = RECOMMENDED_POLLING_DEFAULTS;
+  const defaults = pollerService.defaults;
 
   const poller = pollerService.create({
     servers: urls,
@@ -231,7 +235,7 @@ function startOrdersPolling(
     config,
   } = deps;
   const client = undiciClient.create();
-  const defaults = RECOMMENDED_POLLING_DEFAULTS;
+  const defaults = pollerService.defaults;
   const requiredSignatures = () =>
     computeRequiredSignatures(
       config.ORACLE_SIGNATURE_THRESHOLD,
@@ -285,13 +289,19 @@ function startOrdersPolling(
         try {
           const consensus = reconciliator.reconcile(reconciledOrders);
 
-          const existing = await ordersRepository.findById(orderId);
+          let existing = await ordersRepository.findById(orderId);
           if (!existing) {
-            fastify.log.warn(
-              { orderId },
-              "oracle orders poll skipped missing order"
-            );
-            continue;
+            existing = await ordersRepository.create({
+              id: orderId,
+              ...consensus,
+            });
+            if (!existing) {
+              fastify.log.warn(
+                { orderId },
+                "oracle orders poll skipped missing order"
+              );
+              continue;
+            }
           }
 
           const signatureCounts =

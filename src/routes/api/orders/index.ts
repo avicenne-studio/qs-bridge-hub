@@ -14,6 +14,7 @@ import {
 import { AppConfig, kConfig } from "../../../plugins/infra/env.js";
 import { StoredEventSchema } from "../../../plugins/app/events/schemas/event.js";
 import { EventsRepository, kEventsRepository } from "../../../plugins/app/events/events.repository.js";
+import { computeRequiredSignatures } from "../../../plugins/app/oracle-service.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -116,9 +117,9 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      const threshold = Math.max(
-        1,
-        Math.floor(config.ORACLE_SIGNATURE_THRESHOLD)
+      const threshold = computeRequiredSignatures(
+        config.ORACLE_SIGNATURE_THRESHOLD,
+        config.ORACLE_COUNT
       );
       const ids = await ordersRepository.findRelayableIds();
       const orders = await ordersRepository.findByIdsWithSignatures(ids);

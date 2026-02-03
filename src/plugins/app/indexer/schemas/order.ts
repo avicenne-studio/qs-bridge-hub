@@ -3,6 +3,8 @@ import { QubicTransaction } from "./qubic-transaction.js";
 import { SolanaTransaction } from "./solana-transaction.js";
 import { AmountSchema, StringSchema } from "../../common/schemas/common.js";
 
+const SourcePayloadSchema = Type.String({ minLength: 1, maxLength: 8192 });
+
 export const OracleChain = Type.Union([
   Type.Literal("qubic"),
   Type.Literal("solana"),
@@ -22,6 +24,8 @@ export const OracleOrderSchema = Type.Object({
   to: StringSchema,
   amount: AmountSchema,
   relayerFee: AmountSchema,
+  source_nonce: Type.Optional(StringSchema),
+  source_payload: Type.Optional(SourcePayloadSchema),
   oracle_accept_to_relay: Type.Boolean(),
   status: OracleOrderStatus,
 });

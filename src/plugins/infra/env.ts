@@ -5,6 +5,7 @@ export type AppConfig = {
   PORT: number;
   HOST: string;
   RATE_LIMIT_MAX: number;
+  POLLER_INTERVAL_MS: number;
   SQLITE_DB_FILE: string;
   ORACLE_URLS: string;
   ORACLE_SIGNATURE_THRESHOLD: number;
@@ -33,6 +34,11 @@ const schema = {
     RATE_LIMIT_MAX: {
       type: 'number',
       default: 100 // Put it to 4 in your .env file for tests
+    },
+    POLLER_INTERVAL_MS: {
+      type: 'number',
+      minimum: 1000,
+      default: 10_000
     },
     SQLITE_DB_FILE: {
       type: 'string',
