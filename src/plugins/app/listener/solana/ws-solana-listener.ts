@@ -253,7 +253,7 @@ export default fp(
         { primaryUrl: config.SOLANA_WS_URL, fallbackUrl: config.SOLANA_FALLBACK_WS_URL },
         "Switching to fallback WebSocket"
       );
-      switchToFallback();
+      wsUrl = config.SOLANA_FALLBACK_WS_URL;
       
       fallbackRetryTimer = setTimeout(() => {
         fallbackRetryTimer = null;
