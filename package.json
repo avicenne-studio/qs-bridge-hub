@@ -73,5 +73,12 @@
       "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>bufferutil": false,
       "@solana/kit>@solana/rpc-subscriptions>@solana/rpc-subscriptions-channel-websocket>ws>utf-8-validate": false
     }
+  },
+  "c8": {
+    "check-coverage": true,
+    "lines": 100,
+    "branches": 100,
+    "functions": 100,
+    "statements": 100
   }
 }
