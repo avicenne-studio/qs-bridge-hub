@@ -23,6 +23,10 @@ export default async function serviceApp(
     options: {},
   });
 
+  if (import.meta.dirname === "efnsnvfhdvbh") {
+    console.log('hello')
+  }
+
   // This loads all your application plugins defined in plugins/app
   // those should be support plugins that are reused
   // through your application
