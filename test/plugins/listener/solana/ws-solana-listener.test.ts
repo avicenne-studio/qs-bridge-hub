@@ -551,20 +551,20 @@ describe("ws solana listener plugin", () => {
       return socket;
     };
     const { app } = await buildListenerApp({ wsFactory: factory });
-    const reconnectTimers: (() => void)[] = [];
+    let reconnected = false;
     t.mock.method(global, "setTimeout", (fn: () => void) => {
       if (fn.name !== "retryPrimaryWebSocket") {
-        reconnectTimers.push(fn);
+        reconnected = true;
+        fn();
       }
-      return reconnectTimers.length as unknown as NodeJS.Timeout;
+      return 1 as unknown as NodeJS.Timeout;
     });
 
     const first = sockets[0];
     assert.ok(first);
     first.emit("close", {});
 
-    assert.ok(reconnectTimers.length >= 1);
-    reconnectTimers[0]();
+    assert.ok(reconnected);
     await waitFor(() => sockets.length === 2);
     await app.close();
   });
@@ -577,14 +577,13 @@ describe("ws solana listener plugin", () => {
       return socket;
     };
     const { app } = await buildListenerApp({ wsFactory: factory });
-    let reconnectCallback: (() => void) | null = null;
     let reconnectScheduled = 0;
     t.mock.method(global, "setTimeout", (fn: () => void) => {
       if (fn.name !== "retryPrimaryWebSocket") {
         reconnectScheduled += 1;
-        reconnectCallback = fn;
+        fn();
       }
-      return reconnectScheduled as unknown as NodeJS.Timeout;
+      return 1 as unknown as NodeJS.Timeout;
     });
 
     const first = sockets[0];
@@ -593,8 +592,6 @@ describe("ws solana listener plugin", () => {
     first.emit("close", {});
 
     assert.strictEqual(reconnectScheduled, 1);
-    assert.ok(reconnectCallback);
-    reconnectCallback();
     await waitFor(() => sockets.length === 2);
     await app.close();
   });
