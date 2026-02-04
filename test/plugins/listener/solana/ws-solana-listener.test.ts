@@ -552,8 +552,8 @@ describe("ws solana listener plugin", () => {
     };
     const { app } = await buildListenerApp({ wsFactory: factory });
     const reconnectTimers: (() => void)[] = [];
-    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
-      if (delay !== 60_000) {
+    t.mock.method(global, "setTimeout", (fn: () => void) => {
+      if (fn.name !== "retryPrimaryWebSocket") {
         reconnectTimers.push(fn);
       }
       return reconnectTimers.length as unknown as NodeJS.Timeout;
@@ -579,8 +579,8 @@ describe("ws solana listener plugin", () => {
     const { app } = await buildListenerApp({ wsFactory: factory });
     let reconnectCallback: (() => void) | null = null;
     let reconnectScheduled = 0;
-    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
-      if (delay !== 60_000) {
+    t.mock.method(global, "setTimeout", (fn: () => void) => {
+      if (fn.name !== "retryPrimaryWebSocket") {
         reconnectScheduled += 1;
         reconnectCallback = fn;
       }
@@ -654,8 +654,8 @@ describe("ws solana listener plugin", () => {
 
     let fallbackTimerFn: (() => void) | null = null;
     let reconnectFn: (() => void) | null = null;
-    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
-      if (delay === 60_000) {
+    t.mock.method(global, "setTimeout", (fn: () => void) => {
+      if (fn.name === "retryPrimaryWebSocket") {
         fallbackTimerFn = fn;
       } else {
         reconnectFn = fn;

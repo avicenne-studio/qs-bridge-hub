@@ -21,6 +21,8 @@ import {
 const QS_BRIDGE_PROGRAM_ADDRESS =
   "qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H";
 
+export const RETRY_PRIMARY_WS_TIMER_MS = 60_000;
+
 type WebSocketListener = (event: { data?: unknown }) => void;
 
 type WebSocketLike = {
@@ -244,10 +246,6 @@ export default fp(
       );
     };
 
-    const switchToFallback = () => {
-      wsUrl = config.SOLANA_FALLBACK_WS_URL;
-    };
-
     const temporarySwitchToFallback = () => {
       fastify.log.warn(
         { primaryUrl: config.SOLANA_WS_URL, fallbackUrl: config.SOLANA_FALLBACK_WS_URL },
@@ -255,13 +253,13 @@ export default fp(
       );
       wsUrl = config.SOLANA_FALLBACK_WS_URL;
       
-      fallbackRetryTimer = setTimeout(() => {
+      fallbackRetryTimer = setTimeout(function retryPrimaryWebSocket() {
         fallbackRetryTimer = null;
         if (isUsingFallback() && !shuttingDown && ws) {
           fastify.log.info("Attempting to switch back to primary WebSocket");
           ws.close();
         }
-      }, 60_000);
+      }, RETRY_PRIMARY_WS_TIMER_MS);
     };
 
     const scheduleReconnect = () => {
