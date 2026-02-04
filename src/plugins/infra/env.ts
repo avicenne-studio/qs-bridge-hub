@@ -12,6 +12,7 @@ export type AppConfig = {
   ORACLE_COUNT: number;
   HUB_KEYS_FILE: string;
   SOLANA_WS_URL: string;
+  SOLANA_FALLBACK_WS_URL?: string;
   SOLANA_LISTENER_ENABLED: boolean;
 };
 
@@ -69,6 +70,9 @@ const schema = {
       type: 'string',
     },
     SOLANA_WS_URL: {
+      type: 'string',
+    },
+    SOLANA_FALLBACK_WS_URL: {
       type: 'string',
     },
     SOLANA_LISTENER_ENABLED: {

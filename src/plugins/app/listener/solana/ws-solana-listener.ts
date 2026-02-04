@@ -93,6 +93,9 @@ export default fp(
     let wsFactory: WebSocketFactory | null = null;
     let reconnectTimer: NodeJS.Timeout | null = null;
     let reconnectAttempt = 0;
+    let consecutiveFailures = 0;
+    let usingFallback = false;
+    let fallbackRetryTimer: NodeJS.Timeout | null = null;
     let shuttingDown = false;
     let subscriptionId: number | null = null;
     const queue = new AsyncQueue((error) => {
@@ -221,7 +224,11 @@ export default fp(
         { commitment: "confirmed" },
       ]);
       reconnectAttempt = 0;
-      fastify.log.info({ wsUrl }, "Solana listener WebSocket connected");
+      consecutiveFailures = 0;
+      fastify.log.info(
+        { wsUrl, usingFallback },
+        "Solana listener WebSocket connected"
+      );
     };
 
     const onError = (event: { data?: unknown }) => {
@@ -238,6 +245,37 @@ export default fp(
       );
     };
 
+    const switchToFallback = () => {
+      if (usingFallback || !config.SOLANA_FALLBACK_WS_URL) {
+        return false;
+      }
+      fastify.log.warn(
+        { primaryUrl: config.SOLANA_WS_URL, fallbackUrl: config.SOLANA_FALLBACK_WS_URL },
+        "Switching to fallback WebSocket after consecutive failures"
+      );
+      wsUrl = config.SOLANA_FALLBACK_WS_URL;
+      usingFallback = true;
+      consecutiveFailures = 0;
+      
+      if (fallbackRetryTimer) {
+        clearTimeout(fallbackRetryTimer);
+      }
+      fallbackRetryTimer = setTimeout(() => {
+        if (usingFallback && !shuttingDown) {
+          fastify.log.info("Attempting to switch back to primary WebSocket");
+          wsUrl = config.SOLANA_WS_URL;
+          usingFallback = false;
+          consecutiveFailures = 0;
+          
+          if (ws) {
+            ws.close();
+          }
+        }
+      }, 60_000);
+      
+      return true;
+    };
+
     const scheduleReconnect = () => {
       if (shuttingDown) {
         return;
@@ -245,6 +283,15 @@ export default fp(
       if (reconnectTimer) {
         return;
       }
+      
+      consecutiveFailures++;
+      
+      if (consecutiveFailures >= 2 && !usingFallback) {
+        if (switchToFallback()) {
+          reconnectAttempt = 0; 
+        }
+      }
+      
       const delayMs = Math.min(30_000, 1000 * 2 ** reconnectAttempt);
       reconnectAttempt += 1;
       reconnectTimer = setTimeout(() => {
@@ -252,7 +299,7 @@ export default fp(
         if (!wsUrl || !wsFactory) {
           return;
         }
-        fastify.log.warn({ wsUrl, delayMs }, "Reconnecting Solana WS");
+        fastify.log.warn({ wsUrl, delayMs, usingFallback }, "Reconnecting Solana WS");
         ws = wsFactory(wsUrl);
         ws.addEventListener("open", onOpen);
         ws.addEventListener("message", onMessage);
@@ -298,6 +345,10 @@ export default fp(
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
+      }
+      if (fallbackRetryTimer) {
+        clearTimeout(fallbackRetryTimer);
+        fallbackRetryTimer = null;
       }
       ws.removeEventListener("open", onOpen);
       ws.removeEventListener("message", onMessage);
