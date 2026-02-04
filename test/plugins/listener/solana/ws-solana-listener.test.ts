@@ -33,6 +33,7 @@ class MockWebSocket {
   static CLOSED = 3;
   readyState = MockWebSocket.OPEN;
   sent: string[] = [];
+  url?: string;
   private readonly keepListeners: boolean;
   private listeners = new Map<keyof WsEventMap, Set<WsEventHandler>>();
 
@@ -192,9 +193,10 @@ function createInMemoryEvents() {
 type ListenerAppOptions = {
   enabled?: boolean;
   ws?: MockWebSocket;
-  wsFactory?: () => MockWebSocket;
+  wsFactory?: (url: string) => MockWebSocket;
   eventsRepository?: ReturnType<typeof createInMemoryEvents>;
   wsUrl?: string;
+  fallbackWsUrl?: string;
 };
 
 async function buildListenerApp({
@@ -203,6 +205,7 @@ async function buildListenerApp({
   wsFactory,
   eventsRepository = createInMemoryEvents(),
   wsUrl = "ws://localhost:8900",
+  fallbackWsUrl = "ws://fallback:8900",
 }: ListenerAppOptions = {}) {
   const app = fastify({ logger: false });
 
@@ -212,6 +215,7 @@ async function buildListenerApp({
         instance.decorate(kConfig, {
           SOLANA_LISTENER_ENABLED: enabled,
           SOLANA_WS_URL: wsUrl,
+          SOLANA_FALLBACK_WS_URL: fallbackWsUrl,
           PORT: 3000,
           HOST: "127.0.0.1",
           RATE_LIMIT_MAX: 100,
@@ -547,19 +551,21 @@ describe("ws solana listener plugin", () => {
       return socket;
     };
     const { app } = await buildListenerApp({ wsFactory: factory });
-    let scheduled = 0;
-    t.mock.method(global, "setTimeout", (fn: () => void) => {
-      scheduled += 1;
-      fn();
-      return 1 as unknown as NodeJS.Timeout;
+    const reconnectTimers: (() => void)[] = [];
+    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
+      if (delay !== 60_000) {
+        reconnectTimers.push(fn);
+      }
+      return reconnectTimers.length as unknown as NodeJS.Timeout;
     });
 
     const first = sockets[0];
     assert.ok(first);
     first.emit("close", {});
 
+    assert.ok(reconnectTimers.length >= 1);
+    reconnectTimers[0]();
     await waitFor(() => sockets.length === 2);
-    assert.ok(scheduled >= 1);
     await app.close();
   });
 
@@ -571,12 +577,14 @@ describe("ws solana listener plugin", () => {
       return socket;
     };
     const { app } = await buildListenerApp({ wsFactory: factory });
-    let storedCallback: (() => void) | null = null;
-    let scheduled = 0;
-    t.mock.method(global, "setTimeout", (fn: () => void) => {
-      scheduled += 1;
-      storedCallback = fn;
-      return 1 as unknown as NodeJS.Timeout;
+    let reconnectCallback: (() => void) | null = null;
+    let reconnectScheduled = 0;
+    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
+      if (delay !== 60_000) {
+        reconnectScheduled += 1;
+        reconnectCallback = fn;
+      }
+      return reconnectScheduled as unknown as NodeJS.Timeout;
     });
 
     const first = sockets[0];
@@ -584,8 +592,9 @@ describe("ws solana listener plugin", () => {
     first.emit("close", {});
     first.emit("close", {});
 
-    assert.strictEqual(scheduled, 1);
-    storedCallback?.();
+    assert.strictEqual(reconnectScheduled, 1);
+    assert.ok(reconnectCallback);
+    reconnectCallback();
     await waitFor(() => sockets.length === 2);
     await app.close();
   });
@@ -625,6 +634,52 @@ describe("ws solana listener plugin", () => {
     assert.ok(first);
     first.emit("close", {});
     assert.strictEqual(sockets.length, 1);
+    await app.close();
+  });
+
+  it("switches to fallback on first failure and back to primary after 60s", async (t) => {
+    const connections: { url: string; socket: MockWebSocket }[] = [];
+    const factory = (url: string) => {
+      const socket = new MockWebSocket();
+      socket.url = url;
+      connections.push({ url, socket });
+      return socket;
+    };
+
+    const { app } = await buildListenerApp({
+      wsFactory: factory,
+      wsUrl: "ws://primary:8900",
+      fallbackWsUrl: "ws://fallback:8900",
+    });
+
+    let fallbackTimerFn: (() => void) | null = null;
+    let reconnectFn: (() => void) | null = null;
+    t.mock.method(global, "setTimeout", (fn: () => void, delay?: number) => {
+      if (delay === 60_000) {
+        fallbackTimerFn = fn;
+      } else {
+        reconnectFn = fn;
+      }
+      return 1 as unknown as NodeJS.Timeout;
+    });
+
+    assert.strictEqual(connections[0].url, "ws://primary:8900");
+
+    connections[0].socket.emit("close", {});
+    assert.ok(reconnectFn);
+    (reconnectFn as () => void)();
+
+    assert.strictEqual(connections.length, 2);
+    assert.strictEqual(connections[1].url, "ws://fallback:8900");
+
+    assert.ok(fallbackTimerFn);
+    (fallbackTimerFn as () => void)();
+    assert.ok(reconnectFn);
+    (reconnectFn as () => void)();
+
+    assert.strictEqual(connections.length, 3);
+    assert.strictEqual(connections[2].url, "ws://primary:8900");
+
     await app.close();
   });
 });
