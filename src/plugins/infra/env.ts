@@ -14,6 +14,11 @@ export type AppConfig = {
   SOLANA_WS_URL: string;
   SOLANA_FALLBACK_WS_URL: string;
   SOLANA_LISTENER_ENABLED: boolean;
+  HELIUS_RPC_URL: string;
+  HELIUS_POLLER_ENABLED: boolean;
+  HELIUS_POLLER_INTERVAL_MS: number;
+  HELIUS_POLLER_LOOKBACK_SECONDS: number;
+  HELIUS_POLLER_TIMEOUT_MS: number;
 };
 
 export const kConfig = 'config'
@@ -30,7 +35,12 @@ const schema = {
     'ORACLE_COUNT',
     'SOLANA_WS_URL',
     'SOLANA_FALLBACK_WS_URL',
-    'SOLANA_LISTENER_ENABLED'
+    'SOLANA_LISTENER_ENABLED',
+    'HELIUS_RPC_URL',
+    'HELIUS_POLLER_ENABLED',
+    'HELIUS_POLLER_INTERVAL_MS',
+    'HELIUS_POLLER_LOOKBACK_SECONDS',
+    'HELIUS_POLLER_TIMEOUT_MS'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -73,12 +83,37 @@ const schema = {
     SOLANA_WS_URL: {
       type: 'string',
     },
+    SOLANA_RPC_URL: {
+      type: 'string',
+    },
     SOLANA_FALLBACK_WS_URL: {
       type: 'string',
     },
     SOLANA_LISTENER_ENABLED: {
       type: 'boolean',
       default: true
+    },
+    HELIUS_RPC_URL: {
+      type: 'string',
+    },
+    HELIUS_POLLER_ENABLED: {
+      type: 'boolean',
+      default: true
+    },
+    HELIUS_POLLER_INTERVAL_MS: {
+      type: 'number',
+      minimum: 1000,
+      default: 300_000
+    },
+    HELIUS_POLLER_LOOKBACK_SECONDS: {
+      type: 'number',
+      minimum: 60,
+      default: 600
+    },
+    HELIUS_POLLER_TIMEOUT_MS: {
+      type: 'number',
+      minimum: 1000,
+      default: 30_000
     }
   }
 }
