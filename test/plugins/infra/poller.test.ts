@@ -1,7 +1,11 @@
 import { describe, it, TestContext } from "node:test";
-import { createServer } from "node:http";
-import { AddressInfo, Socket } from "node:net";
+import { type Server } from "node:http";
+import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import {
+  createTrackedServer,
+  type TrackedServer,
+} from "../../helpers/http-server.js";
 import {
   kPoller,
   type PollerService,
@@ -13,25 +17,8 @@ import {
 
 const noop = () => {};
 
-const socketsByServer = new WeakMap<ReturnType<typeof createServer>, Set<Socket>>();
-
-function trackServer(server: ReturnType<typeof createServer>) {
-  const sockets = new Set<Socket>();
-  socketsByServer.set(server, sockets);
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-  });
-  return server;
-}
-
-function closeServer(server: ReturnType<typeof createServer>) {
-  return new Promise<void>((resolve) => {
-    for (const socket of socketsByServer.get(server) ?? []) {
-      socket.destroy();
-    }
-    server.close(() => resolve());
-  });
+function closeServer(entry: TrackedServer) {
+  return entry.close();
 }
 
 describe("poller plugin", () => {
@@ -163,35 +150,35 @@ describe("poller plugin", () => {
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
     const fastState = { count: 0 };
-    const fastServer = trackServer(createServer((req, res) => {
+    const fastServer = createTrackedServer((req, res) => {
       fastState.count += 1;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({ server: "fast", round: fastState.count })
       );
-    }));
+    });
 
-    const failingServer = trackServer(createServer((req, res) => {
+    const failingServer = createTrackedServer((req, res) => {
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "boom" }));
-    }));
+    });
 
     let slowAborted = false;
-    const slowServer = trackServer(createServer((req) => {
+    const slowServer = createTrackedServer((req) => {
       req.on("close", () => {
         slowAborted = true;
       });
-    }));
+    });
 
-    const listen = async (srv: ReturnType<typeof createServer>) =>
+    const listen = async (srv: Server) =>
       new Promise<AddressInfo>((resolve) => {
         srv.listen(0, () => resolve(srv.address() as AddressInfo));
       });
 
     const [fastAddr, failingAddr, slowAddr] = await Promise.all([
-      listen(fastServer),
-      listen(failingServer),
-      listen(slowServer),
+      listen(fastServer.server),
+      listen(failingServer.server),
+      listen(slowServer.server),
     ]);
     t.after(() => closeServer(fastServer));
     t.after(() => closeServer(failingServer));

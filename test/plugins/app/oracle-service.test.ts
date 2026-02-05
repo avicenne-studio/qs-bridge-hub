@@ -1,8 +1,11 @@
 import { describe, test, TestContext } from "node:test";
-import { createServer, type Server } from "node:http";
-import { Socket } from "node:net";
+import { type Server } from "node:http";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
+import {
+  createTrackedServer,
+  type TrackedServer,
+} from "../../helpers/http-server.js";
 import {
   computeRequiredSignatures,
   groupOrdersById,
@@ -30,29 +33,6 @@ type ResponseMode = "data" | "array" | "empty";
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 
-const socketsByServer = new WeakMap<Server, Set<Socket>>();
-
-function trackServer(server: Server) {
-  const sockets = new Set<Socket>();
-  socketsByServer.set(server, sockets);
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-  });
-  return server;
-}
-
-function destroyServerSockets(server: Server) {
-  const sockets = socketsByServer.get(server);
-  if (!sockets) {
-    return;
-  }
-  for (const socket of sockets) {
-    socket.destroy();
-  }
-  sockets.clear();
-}
-
 function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
   return {
     id: makeId(1),
@@ -74,17 +54,8 @@ function listen(server: Server, port: number) {
   return new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 }
 
-function closeAll(servers: Server[]) {
-  return Promise.all(
-    servers.map(
-      (server) =>
-        new Promise<void>((resolve) => {
-          server.closeAllConnections?.();
-          destroyServerSockets(server);
-          server.close(() => resolve());
-        })
-    )
-  );
+function closeAll(servers: TrackedServer[]) {
+  return Promise.all(servers.map((entry) => entry.close()));
 }
 
 function createHealthServer(opts: {
@@ -95,7 +66,7 @@ function createHealthServer(opts: {
 }) {
   const { mode, onHealthyRequest, now } = opts;
 
-  return trackServer(createServer((req, res) => {
+  return createTrackedServer((req, res) => {
     if (req.url !== "/api/health") {
       res.writeHead(404).end();
       return;
@@ -115,7 +86,7 @@ function createHealthServer(opts: {
     onHealthyRequest?.();
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ status: "ok", timestamp: now?.() }));
-  }));
+  });
 }
 
 function createOrdersServer(opts: {
@@ -135,7 +106,7 @@ function createOrdersServer(opts: {
     responsePayload,
   } = opts;
 
-  return trackServer(createServer(async (req, res) => {
+  return createTrackedServer(async (req, res) => {
     if (req.url === "/api/health") {
       opts.onHealthRequest?.(req.headers);
       if (healthStatus === "slow") {
@@ -182,7 +153,7 @@ function createOrdersServer(opts: {
     }
 
     res.writeHead(404).end();
-  }));
+  });
 }
 
 function getOracleEntry(app: FastifyInstance, url: string) {
@@ -247,10 +218,10 @@ async function withApp(t: TestContext) {
 
 async function withServers(
   t: TestContext,
-  servers: Server[],
+  servers: TrackedServer[],
   ports: number[]
 ) {
-  await Promise.all(servers.map((s, i) => listen(s, ports[i])));
+  await Promise.all(servers.map((s, i) => listen(s.server, ports[i])));
   t.after(() => closeAll(servers));
 }
 

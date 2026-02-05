@@ -1,39 +1,18 @@
 import { describe, it, TestContext } from "node:test";
-import { createServer } from "node:http";
-import { AddressInfo, Socket } from "node:net";
+import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import { createTrackedServer } from "../../helpers/http-server.js";
 import {
   kUndiciClient,
   type UndiciClientService,
 } from "../../../src/plugins/infra/undici-client.js";
 
 describe("undici client plugin", () => {
-  const socketsByServer = new WeakMap<ReturnType<typeof createServer>, Set<Socket>>();
-
-  function trackServer(server: ReturnType<typeof createServer>) {
-    const sockets = new Set<Socket>();
-    socketsByServer.set(server, sockets);
-    server.on("connection", (socket) => {
-      sockets.add(socket);
-      socket.on("close", () => sockets.delete(socket));
-    });
-    return server;
-  }
-
-  function closeServer(server: ReturnType<typeof createServer>) {
-    return new Promise<void>((resolve) => {
-      for (const socket of socketsByServer.get(server) ?? []) {
-        socket.destroy();
-      }
-      server.close(() => resolve());
-    });
-  }
-
   it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
     const app = await build(t);
 
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
-    const server = trackServer(createServer((req, res) => {
+    const server = createTrackedServer((req, res) => {
       receivedHeaders.push(req.headers);
       if (req.url === "/poll") {
         res.writeHead(200, { "content-type": "application/json" });
@@ -43,14 +22,14 @@ describe("undici client plugin", () => {
 
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "boom" }));
-    }));
+    });
 
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.server.listen(0, resolve);
     });
-    t.after(() => closeServer(server));
+    t.after(() => server.close());
 
-    const { port } = server.address() as AddressInfo;
+    const { port } = server.server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;
 
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
