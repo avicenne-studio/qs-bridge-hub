@@ -43,6 +43,14 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
+const OrderByTrxHashQuerySchema = Type.Object({
+  hash: StringSchema,
+});
+
+const OrderByTrxHashResponseSchema = Type.Object({
+  data: StoredOrderSchema,
+});
+
 const SignatureSchema = StringSchema;
 
 const RelayableSignatureSchema = Type.Object({
@@ -157,6 +165,36 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       } catch (error) {
         fastify.log.error({ err: error }, "Failed to list events");
         throw fastify.httpErrors.internalServerError("Failed to list events");
+      }
+    }
+  );
+
+  fastify.get(
+    "/trx-hash",
+    {
+      schema: {
+        querystring: OrderByTrxHashQuerySchema,
+        response: {
+          200: OrderByTrxHashResponseSchema,
+        },
+      },
+    },
+    async function handler(request) {
+      const { hash } = request.query;
+      try {
+        const order = await ordersRepository.findByOriginTrxHash(hash);
+        if (!order) {
+          throw fastify.httpErrors.notFound("Order not found");
+        }
+        return { data: order };
+      } catch (error) {
+        if (error instanceof Error && error.name === "NotFoundError") {
+          throw error;
+        }
+        fastify.log.error({ err: error }, "Failed to fetch order by trx hash");
+        throw fastify.httpErrors.internalServerError(
+          "Failed to fetch order by trx hash"
+        );
       }
     }
   );

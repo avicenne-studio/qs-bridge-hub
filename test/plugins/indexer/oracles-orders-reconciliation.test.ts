@@ -14,6 +14,7 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   to: "B",
   amount: "10",
   relayerFee: "1",
+  origin_trx_hash: "trx-hash",
   oracle_accept_to_relay: false,
 };
 

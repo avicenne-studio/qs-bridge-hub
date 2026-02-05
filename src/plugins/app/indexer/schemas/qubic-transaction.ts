@@ -6,6 +6,7 @@ export const QubicTransactionSchema = Type.Object({
   recipient: StringSchema,
   amount: Type.Number(),
   nonce: Type.Number(),
+  origin_trx_hash: StringSchema,
 });
 
 export type QubicTransaction = Static<typeof QubicTransactionSchema>;

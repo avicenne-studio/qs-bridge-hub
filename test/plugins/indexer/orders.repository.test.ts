@@ -21,6 +21,7 @@ describe("ordersRepository", () => {
       to: "Bob",
       amount: "123",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -60,6 +61,7 @@ describe("ordersRepository", () => {
       to: "B",
       amount: "10",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -71,6 +73,7 @@ describe("ordersRepository", () => {
       to: "D",
       amount: "20",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
@@ -82,6 +85,7 @@ describe("ordersRepository", () => {
       to: "F",
       amount: "30",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -120,6 +124,7 @@ describe("ordersRepository", () => {
       to: "Y",
       amount: "1",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -131,6 +136,7 @@ describe("ordersRepository", () => {
       to: "T",
       amount: "2",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
@@ -170,6 +176,7 @@ describe("ordersRepository", () => {
       to: "B",
       amount: "50",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -211,6 +218,7 @@ describe("ordersRepository", () => {
       to: "DeleteB",
       amount: "7",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "finalized",
     });
@@ -261,6 +269,7 @@ describe("ordersRepository", () => {
       to: "SigB",
       amount: "5",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -295,6 +304,7 @@ describe("ordersRepository", () => {
       to: "NoSigB",
       amount: "9",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -316,6 +326,7 @@ describe("ordersRepository", () => {
       to: "Q",
       amount: "1",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "pending",
     });
@@ -327,6 +338,7 @@ describe("ordersRepository", () => {
       to: "S",
       amount: "2",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     });
@@ -338,6 +350,7 @@ describe("ordersRepository", () => {
       to: "U",
       amount: "3",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "ready-for-relay",
     });

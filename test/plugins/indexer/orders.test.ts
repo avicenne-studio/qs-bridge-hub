@@ -15,9 +15,11 @@ const mockQubicTx: QubicTransaction = {
   recipient: "BobQ",
   amount: 999,
   nonce: 1,
+  origin_trx_hash: "qubic-trx-hash",
 };
 
 const mockSolanaTx: SolanaTransaction = {
+  signature: "solana-trx-hash",
   recentBlockhash: "ABC123",
   feePayer: "FEEPAYER111",
   instructions: [
@@ -38,6 +40,7 @@ describe("OracleOrder utilities", () => {
       to: "B",
       amount: "10",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: false,
       status: "in-progress",
     };
@@ -53,6 +56,7 @@ describe("OracleOrder utilities", () => {
       to: "B",
       amount: "1",
       relayerFee: "1",
+      origin_trx_hash: "trx-hash",
       oracle_accept_to_relay: true,
       status: "finalized",
     };
@@ -71,6 +75,7 @@ describe("OracleOrder utilities", () => {
     t.assert.strictEqual(order.from, mockQubicTx.sender);
     t.assert.strictEqual(order.to, mockQubicTx.recipient);
     t.assert.strictEqual(order.amount, String(mockQubicTx.amount));
+    t.assert.strictEqual(order.origin_trx_hash, mockQubicTx.origin_trx_hash);
     t.assert.strictEqual(order.oracle_accept_to_relay, false);
     t.assert.strictEqual(order.status, "in-progress");
   });

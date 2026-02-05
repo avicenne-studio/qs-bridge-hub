@@ -1,6 +1,6 @@
 import { describe, it, TestContext } from "node:test";
 import { createServer } from "node:http";
-import { AddressInfo } from "node:net";
+import { AddressInfo, Socket } from "node:net";
 import { build } from "../../helpers/build.js";
 import {
   kPoller,
@@ -12,6 +12,27 @@ import {
 } from "../../../src/plugins/infra/undici-client.js";
 
 const noop = () => {};
+
+const socketsByServer = new WeakMap<ReturnType<typeof createServer>, Set<Socket>>();
+
+function trackServer(server: ReturnType<typeof createServer>) {
+  const sockets = new Set<Socket>();
+  socketsByServer.set(server, sockets);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  return server;
+}
+
+function closeServer(server: ReturnType<typeof createServer>) {
+  return new Promise<void>((resolve) => {
+    for (const socket of socketsByServer.get(server) ?? []) {
+      socket.destroy();
+    }
+    server.close(() => resolve());
+  });
+}
 
 describe("poller plugin", () => {
   it("collects only successful responses per round", async (t: TestContext) => {
@@ -142,25 +163,25 @@ describe("poller plugin", () => {
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
     const fastState = { count: 0 };
-    const fastServer = createServer((req, res) => {
+    const fastServer = trackServer(createServer((req, res) => {
       fastState.count += 1;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({ server: "fast", round: fastState.count })
       );
-    });
+    }));
 
-    const failingServer = createServer((req, res) => {
+    const failingServer = trackServer(createServer((req, res) => {
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "boom" }));
-    });
+    }));
 
     let slowAborted = false;
-    const slowServer = createServer((req) => {
+    const slowServer = trackServer(createServer((req) => {
       req.on("close", () => {
         slowAborted = true;
       });
-    });
+    }));
 
     const listen = async (srv: ReturnType<typeof createServer>) =>
       new Promise<AddressInfo>((resolve) => {
@@ -172,9 +193,9 @@ describe("poller plugin", () => {
       listen(failingServer),
       listen(slowServer),
     ]);
-    t.after(() => fastServer.close());
-    t.after(() => failingServer.close());
-    t.after(() => slowServer.close());
+    t.after(() => closeServer(fastServer));
+    t.after(() => closeServer(failingServer));
+    t.after(() => closeServer(slowServer));
 
     type Response = { server: string; round: number };
 

@@ -1,5 +1,6 @@
 import { describe, test, TestContext } from "node:test";
 import { createServer, type Server } from "node:http";
+import { Socket } from "node:net";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
 import {
@@ -29,6 +30,29 @@ type ResponseMode = "data" | "array" | "empty";
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 
+const socketsByServer = new WeakMap<Server, Set<Socket>>();
+
+function trackServer(server: Server) {
+  const sockets = new Set<Socket>();
+  socketsByServer.set(server, sockets);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  return server;
+}
+
+function destroyServerSockets(server: Server) {
+  const sockets = socketsByServer.get(server);
+  if (!sockets) {
+    return;
+  }
+  for (const socket of sockets) {
+    socket.destroy();
+  }
+  sockets.clear();
+}
+
 function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
   return {
     id: makeId(1),
@@ -39,6 +63,7 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     to: "B",
     amount: "10",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
@@ -46,11 +71,20 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
 }
 
 function listen(server: Server, port: number) {
-  return new Promise<void>((resolve) => server.listen(port, resolve));
+  return new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 }
 
 function closeAll(servers: Server[]) {
-  servers.forEach((s) => s.close());
+  return Promise.all(
+    servers.map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.closeAllConnections?.();
+          destroyServerSockets(server);
+          server.close(() => resolve());
+        })
+    )
+  );
 }
 
 function createHealthServer(opts: {
@@ -61,7 +95,7 @@ function createHealthServer(opts: {
 }) {
   const { mode, onHealthyRequest, now } = opts;
 
-  return createServer((req, res) => {
+  return trackServer(createServer((req, res) => {
     if (req.url !== "/api/health") {
       res.writeHead(404).end();
       return;
@@ -81,7 +115,7 @@ function createHealthServer(opts: {
     onHealthyRequest?.();
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ status: "ok", timestamp: now?.() }));
-  });
+  }));
 }
 
 function createOrdersServer(opts: {
@@ -101,7 +135,7 @@ function createOrdersServer(opts: {
     responsePayload,
   } = opts;
 
-  return createServer(async (req, res) => {
+  return trackServer(createServer(async (req, res) => {
     if (req.url === "/api/health") {
       opts.onHealthRequest?.(req.headers);
       if (healthStatus === "slow") {
@@ -120,6 +154,10 @@ function createOrdersServer(opts: {
 
     if (req.url === "/api/orders" && req.method === "GET") {
       opts.onOrdersRequest?.(req.headers);
+      if (healthStatus === "down") {
+        res.writeHead(503).end();
+        return;
+      }
       if (ordersStatusCode && ordersStatusCode !== 200) {
         res.writeHead(ordersStatusCode).end();
         return;
@@ -144,7 +182,7 @@ function createOrdersServer(opts: {
     }
 
     res.writeHead(404).end();
-  });
+  }));
 }
 
 function getOracleEntry(app: FastifyInstance, url: string) {
@@ -434,6 +472,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -480,6 +519,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -528,6 +568,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -704,6 +745,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -721,8 +763,16 @@ describe("oracle service", () => {
       const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
       ]);
-      t.assert.strictEqual(withSignatures[0].signatures.length, 2);
-      t.assert.strictEqual(downCalls, 0);
+      t.assert.strictEqual(
+        withSignatures[0].signatures.length,
+        2,
+        `expected 2 signatures, got ${withSignatures[0].signatures.length}`
+      );
+      t.assert.strictEqual(
+        downCalls,
+        0,
+        `expected down oracle to be skipped, downCalls=${downCalls}`
+      );
     });
 
     test("signs oracle orders requests", async (t: TestContext) => {
@@ -782,6 +832,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -925,6 +976,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });

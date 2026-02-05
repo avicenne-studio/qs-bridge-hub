@@ -30,6 +30,7 @@ function ensureIdenticalOrders(orders: OracleOrder[]) {
       order.to !== first.to ||
       order.amount !== first.amount ||
       order.relayerFee !== first.relayerFee ||
+      order.origin_trx_hash !== first.origin_trx_hash ||
       order.oracle_accept_to_relay !== first.oracle_accept_to_relay
     ) {
       throw new Error("Orders to reconcile must be identical");

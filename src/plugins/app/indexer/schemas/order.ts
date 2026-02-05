@@ -1,7 +1,10 @@
 import { Static, Type } from "@sinclair/typebox";
 import { QubicTransaction } from "./qubic-transaction.js";
 import { SolanaTransaction } from "./solana-transaction.js";
-import { AmountSchema, StringSchema } from "../../common/schemas/common.js";
+import {
+  AmountSchema,
+  StringSchema,
+} from "../../common/schemas/common.js";
 
 const SourcePayloadSchema = Type.String({ minLength: 1, maxLength: 8192 });
 
@@ -24,6 +27,7 @@ export const OracleOrderSchema = Type.Object({
   to: StringSchema,
   amount: AmountSchema,
   relayerFee: AmountSchema,
+  origin_trx_hash: Type.String({ minLength: 1, maxLength: 255 }),
   source_nonce: Type.Optional(StringSchema),
   source_payload: Type.Optional(SourcePayloadSchema),
   oracle_accept_to_relay: Type.Boolean(),
@@ -50,6 +54,7 @@ export function orderFromQubic(
     to: tx.recipient,
     amount: String(tx.amount),
     relayerFee: "0",
+    origin_trx_hash: tx.origin_trx_hash,
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
@@ -70,6 +75,7 @@ export function orderFromSolana(
     to: decoded.to,
     amount: decoded.amount,
     relayerFee: "0",
+    origin_trx_hash: tx.signature,
     oracle_accept_to_relay: false,
     status: "in-progress",
   };
