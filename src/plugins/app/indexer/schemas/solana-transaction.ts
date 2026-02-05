@@ -8,6 +8,7 @@ export const SolanaInstructionSchema = Type.Object({
 });
 
 export const SolanaTransactionSchema = Type.Object({
+  signature: StringSchema,
   recentBlockhash: StringSchema,
   feePayer: StringSchema,
   instructions: Type.Array(SolanaInstructionSchema),

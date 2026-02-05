@@ -19,6 +19,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     to: "B",
     amount: "10",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -30,6 +31,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     to: "D",
     amount: "25",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -59,6 +61,35 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].oracle_accept_to_relay, false);
 });
 
+test("GET /api/orders/trx-hash returns order by transaction hash", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders/trx-hash?hash=trx-hash",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.origin_trx_hash, "trx-hash");
+  t.assert.strictEqual(body.data.id, makeId(401));
+});
+
+test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders/trx-hash?hash=missing",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 404);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.message, "Order not found");
+});
+
 test("GET /api/orders/signatures returns stored signatures", async (t: TestContext) => {
   const app = await build(t);
   const ordersRepository =
@@ -72,6 +103,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "B",
     amount: "10",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
@@ -83,6 +115,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "D",
     amount: "20",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -94,6 +127,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     to: "F",
     amount: "30",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "finalized",
   });

@@ -1,7 +1,11 @@
 import { describe, it, TestContext } from "node:test";
-import { createServer } from "node:http";
+import { type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import {
+  createTrackedServer,
+  type TrackedServer,
+} from "../../helpers/http-server.js";
 import {
   kPoller,
   type PollerService,
@@ -12,6 +16,10 @@ import {
 } from "../../../src/plugins/infra/undici-client.js";
 
 const noop = () => {};
+
+function closeServer(entry: TrackedServer) {
+  return entry.close();
+}
 
 describe("poller plugin", () => {
   it("collects only successful responses per round", async (t: TestContext) => {
@@ -142,7 +150,7 @@ describe("poller plugin", () => {
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
     const fastState = { count: 0 };
-    const fastServer = createServer((req, res) => {
+    const fastServer = createTrackedServer((req, res) => {
       fastState.count += 1;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
@@ -150,31 +158,31 @@ describe("poller plugin", () => {
       );
     });
 
-    const failingServer = createServer((req, res) => {
+    const failingServer = createTrackedServer((req, res) => {
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "boom" }));
     });
 
     let slowAborted = false;
-    const slowServer = createServer((req) => {
+    const slowServer = createTrackedServer((req) => {
       req.on("close", () => {
         slowAborted = true;
       });
     });
 
-    const listen = async (srv: ReturnType<typeof createServer>) =>
+    const listen = async (srv: Server) =>
       new Promise<AddressInfo>((resolve) => {
         srv.listen(0, () => resolve(srv.address() as AddressInfo));
       });
 
     const [fastAddr, failingAddr, slowAddr] = await Promise.all([
-      listen(fastServer),
-      listen(failingServer),
-      listen(slowServer),
+      listen(fastServer.server),
+      listen(failingServer.server),
+      listen(slowServer.server),
     ]);
-    t.after(() => fastServer.close());
-    t.after(() => failingServer.close());
-    t.after(() => slowServer.close());
+    t.after(() => closeServer(fastServer));
+    t.after(() => closeServer(failingServer));
+    t.after(() => closeServer(slowServer));
 
     type Response = { server: string; round: number };
 

@@ -1,7 +1,7 @@
 import { describe, it, TestContext } from "node:test";
-import { createServer } from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
+import { createTrackedServer } from "../../helpers/http-server.js";
 import {
   kUndiciClient,
   type UndiciClientService,
@@ -12,7 +12,7 @@ describe("undici client plugin", () => {
     const app = await build(t);
 
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
-    const server = createServer((req, res) => {
+    const server = createTrackedServer((req, res) => {
       receivedHeaders.push(req.headers);
       if (req.url === "/poll") {
         res.writeHead(200, { "content-type": "application/json" });
@@ -25,11 +25,11 @@ describe("undici client plugin", () => {
     });
 
     await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
+      server.server.listen(0, resolve);
     });
     t.after(() => server.close());
 
-    const { port } = server.address() as AddressInfo;
+    const { port } = server.server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;
 
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);

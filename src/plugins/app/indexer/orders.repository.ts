@@ -10,6 +10,7 @@ export const ORDER_SIGNATURES_TABLE_NAME = "order_signatures";
 export interface OrdersRepository {
   paginate(q: OrderQuery): Promise<{ orders: StoredOrder[]; total: number }>;
   findById(id: string): Promise<StoredOrder | null>;
+  findByOriginTrxHash(hash: string): Promise<StoredOrder | null>;
   create(newOrder: StoredOrder): Promise<StoredOrder | null>;
   update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
   delete(id: string): Promise<boolean>;
@@ -68,6 +69,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "to",
           "amount",
           "relayerFee",
+          "origin_trx_hash",
           "source_nonce",
           "source_payload",
           "oracle_accept_to_relay",
@@ -110,12 +112,34 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "to",
           "amount",
           "relayerFee",
+          "origin_trx_hash",
           "source_nonce",
           "source_payload",
           "oracle_accept_to_relay",
           "status"
         )
         .where("id", id)
+        .first();
+      return row ? normalizeStoredOrder(row as StoredOrder) : null;
+    },
+
+    async findByOriginTrxHash(hash: string) {
+      const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+        .select(
+          "id",
+          "source",
+          "dest",
+          "from",
+          "to",
+          "amount",
+          "relayerFee",
+          "origin_trx_hash",
+          "source_nonce",
+          "source_payload",
+          "oracle_accept_to_relay",
+          "status"
+        )
+        .where("origin_trx_hash", hash)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
     },
@@ -205,6 +229,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "to",
           "amount",
           "relayerFee",
+          "origin_trx_hash",
           "source_nonce",
           "source_payload",
           "oracle_accept_to_relay",

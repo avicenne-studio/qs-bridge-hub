@@ -52,13 +52,16 @@ export default fp(
           table.string("to").notNullable();
           table.string("amount").notNullable();
           table.string("relayerFee").notNullable().defaultTo("0");
+          table
+            .string("origin_trx_hash", 255)
+            .notNullable();
           table.string("source_nonce").nullable();
           table.text("source_payload").nullable();
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
       }
-      
+
       const hasSignaturesTable = await db.schema.hasTable(
         ORDER_SIGNATURES_TABLE_NAME
       );

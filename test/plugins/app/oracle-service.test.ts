@@ -1,7 +1,11 @@
 import { describe, test, TestContext } from "node:test";
-import { createServer, type Server } from "node:http";
+import { type Server } from "node:http";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { build } from "../../helpers/build.js";
+import {
+  createTrackedServer,
+  type TrackedServer,
+} from "../../helpers/http-server.js";
 import {
   computeRequiredSignatures,
   groupOrdersById,
@@ -39,6 +43,7 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     to: "B",
     amount: "10",
     relayerFee: "1",
+    origin_trx_hash: "trx-hash",
     oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
@@ -46,11 +51,11 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
 }
 
 function listen(server: Server, port: number) {
-  return new Promise<void>((resolve) => server.listen(port, resolve));
+  return new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
 }
 
-function closeAll(servers: Server[]) {
-  servers.forEach((s) => s.close());
+function closeAll(servers: TrackedServer[]) {
+  return Promise.all(servers.map((entry) => entry.close()));
 }
 
 function createHealthServer(opts: {
@@ -61,7 +66,7 @@ function createHealthServer(opts: {
 }) {
   const { mode, onHealthyRequest, now } = opts;
 
-  return createServer((req, res) => {
+  return createTrackedServer((req, res) => {
     if (req.url !== "/api/health") {
       res.writeHead(404).end();
       return;
@@ -101,7 +106,7 @@ function createOrdersServer(opts: {
     responsePayload,
   } = opts;
 
-  return createServer(async (req, res) => {
+  return createTrackedServer(async (req, res) => {
     if (req.url === "/api/health") {
       opts.onHealthRequest?.(req.headers);
       if (healthStatus === "slow") {
@@ -120,6 +125,10 @@ function createOrdersServer(opts: {
 
     if (req.url === "/api/orders" && req.method === "GET") {
       opts.onOrdersRequest?.(req.headers);
+      if (healthStatus === "down") {
+        res.writeHead(503).end();
+        return;
+      }
       if (ordersStatusCode && ordersStatusCode !== 200) {
         res.writeHead(ordersStatusCode).end();
         return;
@@ -209,10 +218,10 @@ async function withApp(t: TestContext) {
 
 async function withServers(
   t: TestContext,
-  servers: Server[],
+  servers: TrackedServer[],
   ports: number[]
 ) {
-  await Promise.all(servers.map((s, i) => listen(s, ports[i])));
+  await Promise.all(servers.map((s, i) => listen(s.server, ports[i])));
   t.after(() => closeAll(servers));
 }
 
@@ -434,6 +443,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -480,6 +490,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -528,6 +539,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -704,6 +716,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -721,8 +734,16 @@ describe("oracle service", () => {
       const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
       ]);
-      t.assert.strictEqual(withSignatures[0].signatures.length, 2);
-      t.assert.strictEqual(downCalls, 0);
+      t.assert.strictEqual(
+        withSignatures[0].signatures.length,
+        2,
+        `expected 2 signatures, got ${withSignatures[0].signatures.length}`
+      );
+      t.assert.strictEqual(
+        downCalls,
+        0,
+        `expected down oracle to be skipped, downCalls=${downCalls}`
+      );
     });
 
     test("signs oracle orders requests", async (t: TestContext) => {
@@ -782,6 +803,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
@@ -925,6 +947,7 @@ describe("oracle service", () => {
         to: "B",
         amount: "10",
         relayerFee: "1",
+        origin_trx_hash: "trx-hash",
         oracle_accept_to_relay: false,
         status: "pending",
       });
