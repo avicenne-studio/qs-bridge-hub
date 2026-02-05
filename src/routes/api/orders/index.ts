@@ -181,21 +181,12 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     },
     async function handler(request) {
       const { hash } = request.query;
-      try {
-        const order = await ordersRepository.findByOriginTrxHash(hash);
+      const order = await ordersRepository.findByOriginTrxHash(hash);
         if (!order) {
           throw fastify.httpErrors.notFound("Order not found");
         }
+
         return { data: order };
-      } catch (error) {
-        if (error instanceof Error && error.name === "NotFoundError") {
-          throw error;
-        }
-        fastify.log.error({ err: error }, "Failed to fetch order by trx hash");
-        throw fastify.httpErrors.internalServerError(
-          "Failed to fetch order by trx hash"
-        );
-      }
     }
   );
 };

@@ -90,35 +90,6 @@ test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: Tes
   t.assert.strictEqual(body.message, "Order not found");
 });
 
-test("GET /api/orders/trx-hash handles repository errors", async (t: TestContext) => {
-  const app = await build(t);
-  const ordersRepository =
-    app.getDecorator<OrdersRepository>(kOrdersRepository);
-  const { mock: repoMock } = t.mock.method(
-    ordersRepository,
-    "findByOriginTrxHash"
-  );
-  repoMock.mockImplementation(() => {
-    throw new Error("db down");
-  });
-
-  const { mock: logMock } = t.mock.method(app.log, "error");
-
-  const res = await app.inject({
-    url: "/api/orders/trx-hash?hash=trx-hash",
-    method: "GET",
-  });
-
-  t.assert.strictEqual(res.statusCode, 500);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [logPayload, logMsg] = logMock.calls[0].arguments as any;
-  t.assert.strictEqual(logMsg, "Failed to fetch order by trx hash");
-  t.assert.strictEqual(logPayload.err.message, "db down");
-
-  const body = JSON.parse(res.payload);
-  t.assert.strictEqual(body.message, "Internal Server Error");
-});
-
 test("GET /api/orders/signatures returns stored signatures", async (t: TestContext) => {
   const app = await build(t);
   const ordersRepository =
