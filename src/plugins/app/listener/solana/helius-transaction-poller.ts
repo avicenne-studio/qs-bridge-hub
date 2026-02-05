@@ -33,11 +33,6 @@ type HeliusRpcResponse = {
 
 export type HeliusFetcher = (signal: AbortSignal) => Promise<HeliusTransaction[]>;
 
-export type HeliusFetcherOwner = {
-  heliusFetcher?: HeliusFetcher;
-  parent?: HeliusFetcherOwner;
-};
-
 export function createDefaultHeliusFetcher(
   client: UndiciClient,
   rpcUrl: string,
@@ -85,12 +80,12 @@ export function createDefaultHeliusFetcher(
 }
 
 export function resolveHeliusFetcher(
-  instance: HeliusFetcherOwner,
-  defaultFetcher: HeliusFetcher
+  instance: FastifyInstance,
+  factory: () => HeliusFetcher
 ): HeliusFetcher {
-  return (
-    instance.heliusFetcher ?? instance.parent?.heliusFetcher ?? defaultFetcher
-  );
+  type HeliusFetcherOwner = { heliusFetcher?: HeliusFetcher; parent?: HeliusFetcherOwner };
+  const owner = instance as unknown as HeliusFetcherOwner;
+  return owner.heliusFetcher ?? owner.parent?.heliusFetcher ?? factory();
 }
 
 export default fp(
@@ -111,25 +106,30 @@ export default fp(
       createSolanaEventHandlers({ eventsRepository, logger: fastify.log });
 
     const client = undiciService.create();
-    const defaultFetcher = createDefaultHeliusFetcher(
-      client,
-      config.HELIUS_RPC_URL,
-      config.HELIUS_POLLER_LOOKBACK_SECONDS
-    );
-    const fetcher = resolveHeliusFetcher(
-      fastify as HeliusFetcherOwner,
-      defaultFetcher
+    const fetcher = resolveHeliusFetcher(fastify, () =>
+      createDefaultHeliusFetcher(
+        client,
+        config.HELIUS_RPC_URL,
+        config.HELIUS_POLLER_LOOKBACK_SECONDS
+      )
     );
 
     const processedSignatures = new Set<string>();
 
-    const extractDecodedEvents = (logMessages: string[]) => {
+    const extractDecodedEvents = (logMessages: string[], txSignature: string) => {
       return logLinesToEvents(logMessages)
         .map(decodeEventBytes)
-        .filter(
-          (decoded): decoded is NonNullable<typeof decoded> =>
-            decoded !== null && decoded.type !== "inbound"
-        );
+        .filter((decoded): decoded is NonNullable<typeof decoded> => {
+          if (decoded && (decoded.type === "outbound" || decoded.type === "override-outbound")) {
+            return true;
+          }
+          
+          if (decoded) {
+            fastify.log.warn({ type: decoded.type, sig: txSignature }, "Unhandled event type");
+          }
+          
+          return false;
+        });
     };
 
     const handleEvent = async (
@@ -138,7 +138,7 @@ export default fp(
     ) => {
       if (decoded.type === "outbound") {
         await handleOutboundEvent(decoded.event, txMeta);
-      } else {
+      } else if (decoded.type === "override-outbound") {
         await handleOverrideOutboundEvent(decoded.event, txMeta);
       }
     };
@@ -146,7 +146,7 @@ export default fp(
     const processTransaction = async (tx: HeliusTransaction) => {
       if (tx.meta.err || !tx.meta.logMessages) return;
 
-      const decodedEvents = extractDecodedEvents(tx.meta.logMessages);
+      const decodedEvents = extractDecodedEvents(tx.meta.logMessages, tx.signature);
       const txMeta = { signature: tx.signature, slot: tx.slot };
 
       for (const decoded of decodedEvents) {
