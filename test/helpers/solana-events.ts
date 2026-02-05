@@ -132,5 +132,9 @@ export function createInMemoryEventsRepository() {
     async listAfter(afterId: number, limit: number) {
       return store.filter((e) => e.id > afterId).slice(0, limit);
     },
+    async findExistingSignatures(signatures: string[]) {
+      const existing = new Set(store.map((e) => e.signature));
+      return signatures.filter((sig) => existing.has(sig));
+    },
   };
 }

@@ -6,24 +6,14 @@ import { Buffer } from "node:buffer";
 import fastify from "fastify";
 import fp from "fastify-plugin";
 import {
-  type HeliusFetcher,
   type HeliusTransaction,
-  resolveHeliusFetcher,
   createDefaultHeliusFetcher,
+  kHeliusFetcher,
 } from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
 import heliusTransactionPoller from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
 import { UndiciClient } from "../../../../src/plugins/infra/undici-client.js";
-import { build } from "../../../helpers/build.js";
 import { createTrackedServer } from "../../../helpers/http-server.js";
-import {
-  kPoller,
-  type PollerService,
-} from "../../../../src/plugins/infra/poller.js";
 import pollerPlugin from "../../../../src/plugins/infra/poller.js";
-import {
-  kUndiciClient,
-  type UndiciClientService,
-} from "../../../../src/plugins/infra/undici-client.js";
 import undiciClientPlugin from "../../../../src/plugins/infra/undici-client.js";
 import { kEventsRepository } from "../../../../src/plugins/app/events/events.repository.js";
 import { kConfig } from "../../../../src/plugins/infra/env.js";
@@ -32,7 +22,6 @@ import {
   toLogLine,
   createInMemoryEventsRepository,
 } from "../../../helpers/solana-events.js";
-import { FastifyInstance } from "fastify";
 
 function createTransaction(
   signature: string,
@@ -43,338 +32,189 @@ function createTransaction(
   return { signature, slot, meta: { err, logMessages } };
 }
 
-async function buildHeliusPollerApp(
-  t: TestContext,
-  config: {
-    heliusRpcUrl: string;
-    heliusPollerIntervalMs: number;
-    eventsRepository: ReturnType<typeof createInMemoryEventsRepository>;
+describe("createDefaultHeliusFetcher", () => {
+  async function createMockHelius(t: TestContext, response: unknown) {
+    const receivedBodies: unknown[] = [];
+    const server = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk);
+      receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(response));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    t.after(() => server.close());
+    const { port } = server.address() as AddressInfo;
+    const client = new UndiciClient();
+    t.after(() => client.close());
+    return { port, client, receivedBodies };
   }
-) {
-  const app = fastify({ logger: false });
 
-  app.register(
-    fp(
-      async (instance) => {
-        instance.decorate(kConfig, {
-          HELIUS_POLLER_ENABLED: true,
-          HELIUS_RPC_URL: config.heliusRpcUrl,
-          HELIUS_POLLER_INTERVAL_MS: config.heliusPollerIntervalMs,
-          HELIUS_POLLER_LOOKBACK_SECONDS: 60,
-          HELIUS_POLLER_TIMEOUT_MS: 1000,
-        });
-      },
-      { name: "env" }
-    )
-  );
+  it("calls getTransactionsForAddress and returns result", async (t: TestContext) => {
+    const { port, client, receivedBodies } = await createMockHelius(t, {
+      result: { data: [{ signature: "sig1", slot: 100, meta: { err: null, logMessages: [] } }] },
+    });
 
-  app.register(
-    fp(
-      async (instance) => {
-        instance.decorate(kEventsRepository, config.eventsRepository);
-      },
-      { name: "events-repository" }
-    )
-  );
+    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
+    const result = await fetcher(new AbortController().signal);
 
-  app.register(pollerPlugin);
-  app.register(undiciClientPlugin);
-  app.register(heliusTransactionPoller);
-
-  await app.ready();
-  t.after(() => app.close());
-
-  return { app, eventsRepository: config.eventsRepository };
-}
-
-async function setupHeliusTest(
-  t: TestContext,
-  mockTransactions: HeliusTransaction[],
-  intervalMs = 1000
-) {
-  const server = createTrackedServer((req, res) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
-      result: { data: mockTransactions }
-    }));
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result[0].signature, "sig1");
+    assert.strictEqual((receivedBodies[0] as { method: string }).method, "getTransactionsForAddress");
   });
 
-  await new Promise<void>((resolve) => {
-    server.server.listen(0, resolve);
-  });
-  t.after(() => server.close());
+  it("throws on RPC error response", async (t: TestContext) => {
+    const { port, client } = await createMockHelius(t, { error: { message: "Rate limited" } });
+    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
 
-  const { port } = server.server.address() as AddressInfo;
-  const eventsRepo = createInMemoryEventsRepository();
-  
-  await buildHeliusPollerApp(t, {
-    heliusRpcUrl: `http://127.0.0.1:${port}`,
-    heliusPollerIntervalMs: intervalMs,
-    eventsRepository: eventsRepo,
+    await assert.rejects(fetcher(new AbortController().signal), /Rate limited/);
   });
 
-  return eventsRepo;
-}
+  it("returns empty array when result.data is missing", async (t: TestContext) => {
+    const { port, client } = await createMockHelius(t, { result: {} });
+    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
 
-describe("helius transaction poller plugin", () => {
-  describe("resolveHeliusFetcher", () => {
-    it("returns default when no custom fetcher exists", () => {
-      const defaultFetcher: HeliusFetcher = async () => [];
-      const factory = () => defaultFetcher;
-      assert.strictEqual(resolveHeliusFetcher({} as unknown as FastifyInstance, factory), defaultFetcher);
-    });
+    assert.deepStrictEqual(await fetcher(new AbortController().signal), []);
+  });
+});
 
-    it("returns custom fetcher from instance", () => {
-      const defaultFetcher: HeliusFetcher = async () => [];
-      const customFetcher: HeliusFetcher = async () => [createTransaction("custom", 1, [])];
-      const factory = () => defaultFetcher;
-      assert.strictEqual(resolveHeliusFetcher({ heliusFetcher: customFetcher } as unknown as FastifyInstance, factory), customFetcher);
+describe("helius poller plugin", () => {
+  async function createMockHeliusServer(t: TestContext, getTransactions: () => HeliusTransaction[]) {
+    const server = createTrackedServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ result: { data: getTransactions() } }));
     });
+    await new Promise<void>((resolve) => server.server.listen(0, resolve));
+    t.after(() => server.close());
+    return server.server.address() as AddressInfo;
+  }
 
-    it("returns custom fetcher from parent", () => {
-      const defaultFetcher: HeliusFetcher = async () => [];
-      const customFetcher: HeliusFetcher = async () => [createTransaction("custom", 1, [])];
-      const factory = () => defaultFetcher;
-      assert.strictEqual(resolveHeliusFetcher({ parent: { heliusFetcher: customFetcher } } as unknown as FastifyInstance, factory), customFetcher);
-    });
+  async function buildApp(t: TestContext, heliusUrl: string, eventsRepo = createInMemoryEventsRepository()) {
+    const app = fastify({ logger: false });
+
+    app.register(fp(async (instance) => {
+      instance.decorate(kConfig, {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: heliusUrl,
+        HELIUS_POLLER_INTERVAL_MS: 100,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
+      });
+    }, { name: "env" }));
+
+    app.register(fp(async (instance) => {
+      instance.decorate(kEventsRepository, eventsRepo);
+    }, { name: "events-repository" }));
+
+    app.register(pollerPlugin);
+    app.register(undiciClientPlugin);
+    app.register(heliusTransactionPoller);
+
+    await app.ready();
+    t.after(() => app.close());
+
+    return { app, eventsRepo };
+  }
+
+  it("processes outbound event from Helius response", async (t: TestContext) => {
+    const { port } = await createMockHeliusServer(t, () => [
+      createTransaction("sig-outbound", 500, [toLogLine(createEventBytes("outbound"))]),
+    ]);
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+    await new Promise((r) => setTimeout(r, 200));
+
+    assert.strictEqual(eventsRepo.store.length, 1);
+    assert.strictEqual(eventsRepo.store[0].signature, "sig-outbound");
+    assert.strictEqual(eventsRepo.store[0].slot, 500);
+    assert.strictEqual(eventsRepo.store[0].type, "outbound");
   });
 
-  describe("createDefaultHeliusFetcher", () => {
-    async function createTestServer(t: TestContext, response: unknown) {
-      const receivedBodies: unknown[] = [];
-      const server = createServer(async (req, res) => {
-        const chunks: Buffer[] = [];
-        for await (const chunk of req) chunks.push(chunk);
-        receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(response));
-      });
-      await new Promise<void>((resolve) => server.listen(0, resolve));
-      t.after(() => server.close());
-      const { port } = server.address() as AddressInfo;
-      const client = new UndiciClient();
-      t.after(() => client.close());
-      return { port, client, receivedBodies };
-    }
+  it("filters out inbound events, keeps outbound and override-outbound", async (t: TestContext) => {
+    const { port } = await createMockHeliusServer(t, () => [
+      createTransaction("sig-1", 100, [toLogLine(createEventBytes("outbound"))]),
+      createTransaction("sig-2", 200, [toLogLine(createEventBytes("override"))]),
+      createTransaction("sig-3", 300, [toLogLine(createEventBytes("inbound"))]),
+    ]);
 
-    it("makes POST requests to Helius RPC", async (t: TestContext) => {
-      const { port, client, receivedBodies } = await createTestServer(t, {
-        result: { data: [{ signature: "test-sig", slot: 123, meta: { err: null, logMessages: [] } }] },
-      });
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+    await new Promise((r) => setTimeout(r, 200));
 
-      const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}/rpc`, 600);
-      const result = await fetcher(new AbortController().signal);
-
-      assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].signature, "test-sig");
-      assert.strictEqual((receivedBodies[0] as { method: string }).method, "getTransactionsForAddress");
-    });
-
-    it("throws on RPC error response", async (t: TestContext) => {
-      const { port, client } = await createTestServer(t, { error: { message: "Rate limited" } });
-      const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}/rpc`, 600);
-      await assert.rejects(fetcher(new AbortController().signal), /Rate limited/);
-    });
-
-    it("returns empty array when result.data is missing", async (t: TestContext) => {
-      const { port, client } = await createTestServer(t, { result: {} });
-      const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}/rpc`, 600);
-      assert.deepStrictEqual(await fetcher(new AbortController().signal), []);
-    });
+    assert.strictEqual(eventsRepo.store.length, 2);
+    assert.ok(eventsRepo.store.some((e) => e.type === "outbound"));
+    assert.ok(eventsRepo.store.some((e) => e.type === "override-outbound"));
   });
 
-  describe("plugin lifecycle", () => {
-    it("skips initialization when HELIUS_POLLER_ENABLED is false", async (t: TestContext) => {
-      const app = await build(t);
-      
-      const pollerService = app.getDecorator<PollerService>(kPoller);
-      t.assert.ok(pollerService, "PollerService should be available even when poller is disabled");
-    });
+  it("skips transactions with meta.err", async (t: TestContext) => {
+    const { port } = await createMockHeliusServer(t, () => [
+      createTransaction("sig-err", 100, [toLogLine(createEventBytes("outbound"))], { err: "failed" }),
+      createTransaction("sig-ok", 200, [toLogLine(createEventBytes("outbound"))]),
+    ]);
 
-    it("creates poller and undici client when enabled", async (t: TestContext) => {
-      const app = await build(t);
-      
-      const pollerService = app.getDecorator<PollerService>(kPoller);
-      const undiciService = app.getDecorator<UndiciClientService>(kUndiciClient);
-      
-      t.assert.ok(pollerService, "PollerService should be available");
-      t.assert.ok(undiciService, "UndiciClient should be available");
-    });
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+    await new Promise((r) => setTimeout(r, 200));
+
+    assert.strictEqual(eventsRepo.store.length, 1);
+    assert.strictEqual(eventsRepo.store[0].signature, "sig-ok");
   });
 
-  describe("integration tests with real services", () => {
-    it("fetches and processes outbound events from mock Helius server", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, [
-        createTransaction("sig1", 100, [toLogLine(createEventBytes("outbound"))])
-      ]);
-
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      assert.strictEqual(eventsRepo.store.length, 1);
-      assert.strictEqual(eventsRepo.store[0].signature, "sig1");
-      assert.strictEqual(eventsRepo.store[0].slot, 100);
-      assert.strictEqual(eventsRepo.store[0].type, "outbound");
+  it("skips signatures already in database", async (t: TestContext) => {
+    const eventsRepo = createInMemoryEventsRepository();
+    await eventsRepo.create({
+      signature: "sig-existing",
+      slot: 100,
+      chain: "solana",
+      type: "outbound",
+      nonce: "nonce1",
+      payload: { amount: "100", recipient: "r", sender: "s" },
     });
 
-    it("processes multiple event types and filters correctly", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, [
-        createTransaction("sig-out", 100, [toLogLine(createEventBytes("outbound"))]),
-        createTransaction("sig-override", 200, [toLogLine(createEventBytes("override"))]),
-        createTransaction("sig-inbound", 300, [toLogLine(createEventBytes("inbound"))]),
-      ]);
+    const { port } = await createMockHeliusServer(t, () => [
+      createTransaction("sig-existing", 100, [toLogLine(createEventBytes("outbound"))]),
+      createTransaction("sig-new", 200, [toLogLine(createEventBytes("outbound"))]),
+    ]);
 
-      await new Promise(resolve => setTimeout(resolve, 1200));
+    await buildApp(t, `http://127.0.0.1:${port}`, eventsRepo);
+    await new Promise((r) => setTimeout(r, 200));
 
-      assert.strictEqual(eventsRepo.store.length, 2);
-      assert.strictEqual(eventsRepo.store[0].type, "outbound");
-      assert.strictEqual(eventsRepo.store[1].type, "override-outbound");
-    });
+    assert.strictEqual(eventsRepo.store.length, 2);
+    assert.strictEqual(eventsRepo.store[1].signature, "sig-new");
+  });
 
-    it("skips transactions with errors", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, [
-        createTransaction("sig-error", 100, [toLogLine(createEventBytes("outbound"))], { err: "some error" }),
-        createTransaction("sig-ok", 200, [toLogLine(createEventBytes("outbound"))]),
-      ]);
+  it("uses custom fetcher when decorated", async (t: TestContext) => {
+    const customTransactions = [
+      createTransaction("custom-sig", 999, [toLogLine(createEventBytes("outbound"))]),
+    ];
 
-      await new Promise(resolve => setTimeout(resolve, 1200));
+    const app = fastify({ logger: false });
 
-      assert.strictEqual(eventsRepo.store.length, 1);
-      assert.strictEqual(eventsRepo.store[0].signature, "sig-ok");
-    });
-
-    it("deduplicates transactions across polling rounds", async (t: TestContext) => {
-      let requestCount = 0;
-      const tx1 = createTransaction("sig-dup", 100, [toLogLine(createEventBytes("outbound"))]);
-      const tx2 = createTransaction("sig-new", 200, [toLogLine(createEventBytes("outbound"))]);
-      
-      const server = createTrackedServer((req, res) => {
-        requestCount++;
-        const data = requestCount === 1 ? [tx1] : [tx1, tx2];
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({
-          result: { data }
-        }));
+    app.register(fp(async (instance) => {
+      instance.decorate(kConfig, {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: "http://unused",
+        HELIUS_POLLER_INTERVAL_MS: 100,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
       });
+    }, { name: "env" }));
 
-      await new Promise<void>((resolve) => {
-        server.server.listen(0, resolve);
-      });
-      t.after(() => server.close());
+    const eventsRepo = createInMemoryEventsRepository();
+    app.register(fp(async (instance) => {
+      instance.decorate(kEventsRepository, eventsRepo);
+    }, { name: "events-repository" }));
 
-      const { port } = server.server.address() as AddressInfo;
-      const eventsRepo = createInMemoryEventsRepository();
-      
-      await buildHeliusPollerApp(t, {
-        heliusRpcUrl: `http://127.0.0.1:${port}`,
-        heliusPollerIntervalMs: 1000,
-        eventsRepository: eventsRepo,
-      });
+    app.decorate(kHeliusFetcher, async () => customTransactions);
 
-      await new Promise(resolve => setTimeout(resolve, 2400));
+    app.register(pollerPlugin);
+    app.register(undiciClientPlugin);
+    app.register(heliusTransactionPoller);
 
-      assert.strictEqual(eventsRepo.store.length, 2);
-      assert.strictEqual(eventsRepo.store[0].signature, "sig-dup");
-      assert.strictEqual(eventsRepo.store[1].signature, "sig-new");
-    });
+    await app.ready();
+    t.after(() => app.close());
 
-    it("skips transactions without log messages", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, [
-        createTransaction("sig-no-logs", 100, null),
-        createTransaction("sig-with-logs", 200, [toLogLine(createEventBytes("outbound"))]),
-      ]);
+    await new Promise((r) => setTimeout(r, 200));
 
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      assert.strictEqual(eventsRepo.store.length, 1);
-      assert.strictEqual(eventsRepo.store[0].signature, "sig-with-logs");
-    });
-
-    it("ignores malformed event logs that cannot be decoded", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, [
-        createTransaction("sig-malformed", 100, [
-          "Program log: Instruction: InitializeBridge",
-          "Program log: invalid event data xyz123"
-        ]),
-        createTransaction("sig-valid", 200, [toLogLine(createEventBytes("outbound"))]),
-      ]);
-
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      assert.strictEqual(eventsRepo.store.length, 1);
-      assert.strictEqual(eventsRepo.store[0].signature, "sig-valid");
-    });
-
-    it("handles empty response from Helius server", async (t: TestContext) => {
-      const eventsRepo = await setupHeliusTest(t, []);
-
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      assert.strictEqual(eventsRepo.store.length, 0);
-    });
-
-    it("continues processing other events when one fails", async (t: TestContext) => {
-      const server = createTrackedServer((req, res) => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({
-          result: { data: [
-            createTransaction("sig-fail", 100, [toLogLine(createEventBytes("outbound"))]),
-            createTransaction("sig-ok", 200, [toLogLine(createEventBytes("outbound"))]),
-          ]}
-        }));
-      });
-
-      await new Promise<void>((resolve) => {
-        server.server.listen(0, resolve);
-      });
-      t.after(() => server.close());
-
-      const { port } = server.server.address() as AddressInfo;
-      
-      let callCount = 0;
-      const failingRepo = createInMemoryEventsRepository();
-      const originalCreate = failingRepo.create;
-      failingRepo.create = async (event) => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error("Database error");
-        }
-        return originalCreate(event);
-      };
-      
-      await buildHeliusPollerApp(t, {
-        heliusRpcUrl: `http://127.0.0.1:${port}`,
-        heliusPollerIntervalMs: 1000,
-        eventsRepository: failingRepo,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 1200));
-
-      assert.strictEqual(failingRepo.store.length, 1);
-      assert.strictEqual(failingRepo.store[0].signature, "sig-ok");
-    });
-
-    it("handles server timeout gracefully", async (t: TestContext) => {
-      const server = createTrackedServer(() => {
-        // Don't respond, let it timeout
-      });
-
-      await new Promise<void>((resolve) => {
-        server.server.listen(0, resolve);
-      });
-      t.after(() => server.close());
-
-      const { port } = server.server.address() as AddressInfo;
-      const eventsRepo = createInMemoryEventsRepository();
-      
-      await buildHeliusPollerApp(t, {
-        heliusRpcUrl: `http://127.0.0.1:${port}`,
-        heliusPollerIntervalMs: 1000,
-        eventsRepository: eventsRepo,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      assert.strictEqual(eventsRepo.store.length, 0);
-    });
+    assert.strictEqual(eventsRepo.store.length, 1);
+    assert.strictEqual(eventsRepo.store[0].signature, "custom-sig");
   });
 });

@@ -4,10 +4,7 @@ import type { AppConfig } from "../../../infra/env.js";
 import { kConfig } from "../../../infra/env.js";
 import type { EventsRepository } from "../../events/events.repository.js";
 import { kEventsRepository } from "../../events/events.repository.js";
-import {
-  kPoller,
-  type PollerService,
-} from "../../../infra/poller.js";
+import { kPoller, type PollerService } from "../../../infra/poller.js";
 import {
   kUndiciClient,
   type UndiciClientService,
@@ -31,12 +28,16 @@ type HeliusRpcResponse = {
   error?: { message: string };
 };
 
-export type HeliusFetcher = (signal: AbortSignal) => Promise<HeliusTransaction[]>;
+export type HeliusFetcher = (
+  signal: AbortSignal,
+) => Promise<HeliusTransaction[]>;
+
+export const kHeliusFetcher = Symbol.for("heliusFetcher");
 
 export function createDefaultHeliusFetcher(
   client: UndiciClient,
   rpcUrl: string,
-  lookbackSeconds: number
+  lookbackSeconds: number,
 ): HeliusFetcher {
   const url = new URL(rpcUrl);
   const origin = url.origin;
@@ -57,7 +58,7 @@ export function createDefaultHeliusFetcher(
           maxSupportedTransactionVersion: 0,
           filters: {
             blockTime: { gte: now - lookbackSeconds, lte: now },
-            status: "succeeded", //TODO: In PROD we should wait for the transaction to be Finalized and do the same for the WebSocket implementation. 
+            status: "succeeded", //TODO: In PROD we should wait for the transaction to be Finalized and do the same for the WebSocket implementation.
             tokenAccounts: "balanceChanged",
           },
         },
@@ -68,7 +69,7 @@ export function createDefaultHeliusFetcher(
       origin,
       path,
       body,
-      signal
+      signal,
     );
 
     if (response.error) {
@@ -81,11 +82,12 @@ export function createDefaultHeliusFetcher(
 
 export function resolveHeliusFetcher(
   instance: FastifyInstance,
-  factory: () => HeliusFetcher
+  factory: () => HeliusFetcher,
 ): HeliusFetcher {
-  type HeliusFetcherOwner = { heliusFetcher?: HeliusFetcher; parent?: HeliusFetcherOwner };
-  const owner = instance as unknown as HeliusFetcherOwner;
-  return owner.heliusFetcher ?? owner.parent?.heliusFetcher ?? factory();
+  if (instance.hasDecorator(kHeliusFetcher)) {
+    return instance.getDecorator<HeliusFetcher>(kHeliusFetcher);
+  }
+  return factory();
 }
 
 export default fp(
@@ -100,7 +102,8 @@ export default fp(
     const eventsRepository =
       fastify.getDecorator<EventsRepository>(kEventsRepository);
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
-    const undiciService = fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    const undiciService =
+      fastify.getDecorator<UndiciClientService>(kUndiciClient);
 
     const { handleOutboundEvent, handleOverrideOutboundEvent } =
       createSolanaEventHandlers({ eventsRepository, logger: fastify.log });
@@ -110,31 +113,39 @@ export default fp(
       createDefaultHeliusFetcher(
         client,
         config.HELIUS_RPC_URL,
-        config.HELIUS_POLLER_LOOKBACK_SECONDS
-      )
+        config.HELIUS_POLLER_LOOKBACK_SECONDS,
+      ),
     );
 
-    const processedSignatures = new Set<string>();
-
-    const extractDecodedEvents = (logMessages: string[], txSignature: string) => {
+    const extractDecodedEvents = (
+      logMessages: string[],
+      txSignature: string,
+    ) => {
       return logLinesToEvents(logMessages)
         .map(decodeEventBytes)
         .filter((decoded): decoded is NonNullable<typeof decoded> => {
-          if (decoded && (decoded.type === "outbound" || decoded.type === "override-outbound")) {
+          if (
+            decoded &&
+            (decoded.type === "outbound" ||
+              decoded.type === "override-outbound")
+          ) {
             return true;
           }
-          
+
           if (decoded) {
-            fastify.log.warn({ type: decoded.type, sig: txSignature }, "Unhandled event type");
+            fastify.log.warn(
+              { type: decoded.type, sig: txSignature },
+              "Unhandled event type",
+            );
           }
-          
+
           return false;
         });
     };
 
     const handleEvent = async (
       decoded: NonNullable<ReturnType<typeof decodeEventBytes>>,
-      txMeta: { signature: string; slot: number }
+      txMeta: { signature: string; slot: number },
     ) => {
       if (decoded.type === "outbound") {
         await handleOutboundEvent(decoded.event, txMeta);
@@ -146,44 +157,43 @@ export default fp(
     const processTransaction = async (tx: HeliusTransaction) => {
       if (tx.meta.err || !tx.meta.logMessages) return;
 
-      const decodedEvents = extractDecodedEvents(tx.meta.logMessages, tx.signature);
+      const decodedEvents = extractDecodedEvents(
+        tx.meta.logMessages,
+        tx.signature,
+      );
       const txMeta = { signature: tx.signature, slot: tx.slot };
 
       for (const decoded of decodedEvents) {
-        try {
-          await handleEvent(decoded, txMeta);
-        } catch (err) {
-          fastify.log.error({ err, sig: tx.signature }, "Helius event error");
-        }
+        await handleEvent(decoded, txMeta);
       }
     };
 
-    const filterNewTransactions = (transactions: HeliusTransaction[]) => {
-      const newTransactions = transactions.filter(tx => !processedSignatures.has(tx.signature));
-      
-      processedSignatures.clear();
-      transactions.forEach(tx => processedSignatures.add(tx.signature));
-      
-      return newTransactions;
+    const filterNewTransactions = async (transactions: HeliusTransaction[]) => {
+      const signatures = transactions.map((tx) => tx.signature);
+      const existingSignatures =
+        await eventsRepository.findExistingSignatures(signatures);
+      const existingSet = new Set(existingSignatures);
+      return transactions.filter((tx) => !existingSet.has(tx.signature));
     };
 
     const processTransactions = async (transactions: HeliusTransaction[]) => {
-      const newTransactions = filterNewTransactions(transactions);
+      const newTransactions = await filterNewTransactions(transactions);
 
       if (newTransactions.length > 0) {
         fastify.log.info(
           { count: newTransactions.length, total: transactions.length },
-          "Helius poller fetched"
+          "Helius poller fetched",
         );
-        await Promise.allSettled(newTransactions.map(tx => processTransaction(tx)));
+        await Promise.allSettled(
+          newTransactions.map((tx) => processTransaction(tx)),
+        );
       }
     };
 
     const poller = pollerService.create<HeliusTransaction[]>({
       servers: [config.HELIUS_RPC_URL],
       fetchOne: (_server, signal) => fetcher(signal),
-      onRound: async (responses) => {
-        const transactions = responses[0] ?? [];
+      onRound: async ([transactions = []]) => {
         await processTransactions(transactions);
       },
       intervalMs: config.HELIUS_POLLER_INTERVAL_MS,
@@ -199,5 +209,5 @@ export default fp(
   {
     name: "helius-transaction-poller",
     dependencies: ["env", "events-repository", "polling", "undici-client"],
-  }
+  },
 );
