@@ -11,13 +11,16 @@ import wsSolanaListener, {
   resolveSolanaWsFactory,
 } from "../../../../src/plugins/app/listener/solana/ws-solana-listener.js";
 import { waitFor } from "../../../helpers/wait-for.js";
-import { getInboundEventEncoder } from "../../../../src/clients/js/types/inboundEvent.js";
-import { getOutboundEventEncoder } from "../../../../src/clients/js/types/outboundEvent.js";
-import { getOverrideOutboundEventEncoder } from "../../../../src/clients/js/types/overrideOutboundEvent.js";
 import { kConfig } from "../../../../src/plugins/infra/env.js";
 import {
   kEventsRepository,
 } from "../../../../src/plugins/app/events/events.repository.js";
+import {
+  createInMemoryEventsRepository,
+  createOutboundEventBytes,
+  createOverrideEventBytes,
+  createInboundEventBytes,
+} from "../../../helpers/solana-events.js";
 
 type WsEventMap = {
   open: Record<string, never>;
@@ -46,7 +49,7 @@ class MockWebSocket {
     listener: (event: WsEventMap[K]) => void
   ) {
     const bucket = this.listeners.get(type) ?? new Set<WsEventHandler>();
-    bucket.add(listener);
+    bucket.add(listener as WsEventHandler);
     this.listeners.set(type, bucket);
   }
 
@@ -61,7 +64,7 @@ class MockWebSocket {
     if (!bucket) {
       return;
     }
-    bucket.delete(listener);
+    bucket.delete(listener as WsEventHandler);
   }
 
   send(payload: string) {
@@ -84,60 +87,6 @@ class MockWebSocket {
   }
 }
 
-function createOutboundEventBytes() {
-  const encoder = getOutboundEventEncoder();
-  const nonce = new Uint8Array(32);
-  nonce[31] = 1;
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 1,
-      networkIn: 1,
-      networkOut: 1,
-      tokenIn: new Uint8Array(32).fill(1),
-      tokenOut: new Uint8Array(32).fill(2),
-      fromAddress: new Uint8Array(32).fill(3),
-      toAddress: new Uint8Array(32).fill(4),
-      amount: 10n,
-      relayerFee: 2n,
-      nonce,
-    })
-  );
-}
-
-function createOverrideEventBytes() {
-  const encoder = getOverrideOutboundEventEncoder();
-  const nonce = new Uint8Array(32);
-  nonce[31] = 1;
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 2,
-      toAddress: new Uint8Array(32).fill(9),
-      relayerFee: 7n,
-      nonce,
-    })
-  );
-}
-
-function createInboundEventBytes() {
-  const encoder = getInboundEventEncoder();
-  const nonce = new Uint8Array(32);
-  nonce[31] = 1;
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 0,
-      networkIn: 1,
-      networkOut: 2,
-      tokenIn: new Uint8Array(32).fill(1),
-      tokenOut: new Uint8Array(32).fill(2),
-      fromAddress: new Uint8Array(32).fill(3),
-      toAddress: new Uint8Array(32).fill(4),
-      amount: 10n,
-      relayerFee: 2n,
-      nonce,
-    })
-  );
-}
-
 function createLogsNotification(
   lines: string[],
   signature?: string,
@@ -154,47 +103,11 @@ function createLogsNotification(
   });
 }
 
-function createInMemoryEvents() {
-  const store: Array<{
-    id: number;
-    signature: string;
-    slot: number | null;
-    chain: "solana";
-    type: "outbound" | "override-outbound";
-    nonce: string;
-    payload: Record<string, unknown>;
-    createdAt: string;
-  }> = [];
-  let nextId = 1;
-  return {
-    store,
-    async create(event: {
-      signature: string;
-      slot: number | null;
-      chain: "solana";
-      type: "outbound" | "override-outbound";
-      nonce: string;
-      payload: Record<string, unknown>;
-    }) {
-      const created = {
-        id: nextId++,
-        createdAt: new Date().toISOString(),
-        ...event,
-      };
-      store.push(created);
-      return created;
-    },
-    async listAfter(afterId: number, limit: number) {
-      return store.filter((event) => event.id > afterId).slice(0, limit);
-    },
-  };
-}
-
 type ListenerAppOptions = {
   enabled?: boolean;
   ws?: MockWebSocket;
   wsFactory?: (url: string) => MockWebSocket;
-  eventsRepository?: ReturnType<typeof createInMemoryEvents>;
+  eventsRepository?: ReturnType<typeof createInMemoryEventsRepository>;
   wsUrl?: string;
   fallbackWsUrl?: string;
 };
@@ -203,7 +116,7 @@ async function buildListenerApp({
   enabled = true,
   ws = new MockWebSocket(),
   wsFactory,
-  eventsRepository = createInMemoryEvents(),
+  eventsRepository = createInMemoryEventsRepository(),
   wsUrl = "ws://localhost:8900",
   fallbackWsUrl = "ws://fallback:8900",
 }: ListenerAppOptions = {}) {
@@ -284,7 +197,7 @@ describe("ws solana listener plugin", () => {
     );
     app.register(
       fp(async (instance) => {
-        instance.decorate(kEventsRepository, createInMemoryEvents());
+        instance.decorate(kEventsRepository, createInMemoryEventsRepository());
       }, { name: "events-repository" })
     );
     app.decorate("solanaWsFactory", () => {
@@ -345,7 +258,7 @@ describe("ws solana listener plugin", () => {
     );
     app.register(
       fp(async (instance) => {
-        instance.decorate(kEventsRepository, createInMemoryEvents());
+        instance.decorate(kEventsRepository, createInMemoryEventsRepository());
       }, { name: "events-repository" })
     );
     app.register(wsSolanaListener);
@@ -354,7 +267,7 @@ describe("ws solana listener plugin", () => {
   });
 
   it("logs queue errors from async tasks", async (t) => {
-    const repo = createInMemoryEvents();
+    const repo = createInMemoryEventsRepository();
     repo.create = async () => {
       throw new Error("queue-fail");
     };

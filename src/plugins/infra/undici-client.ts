@@ -78,6 +78,32 @@ export class UndiciClient {
     return (await res.body.json()) as T;
   }
 
+  async postJson<T>(
+    origin: string,
+    path: string,
+    body: unknown,
+    signal?: AbortSignal,
+    headers?: Record<string, string>
+  ): Promise<T> {
+    const res = await request(`${origin}${path}`, {
+      method: "POST",
+      dispatcher: this.poolFor(origin),
+      signal,
+      headers: {
+        "content-type": "application/json",
+        ...this.opts.headers,
+        ...(headers ?? {}),
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw new Error(`HTTP ${res.statusCode}`);
+    }
+
+    return (await res.body.json()) as T;
+  }
+
   async close(): Promise<void> {
     const pools = [...this.pools.values()];
     this.pools.clear();
