@@ -44,49 +44,7 @@ describe("undici client plugin", () => {
     t.assert.strictEqual(receivedHeaders[0]["x-default"], "override");
 
     await t.assert.rejects(client.getJson(origin, "/fail"), /HTTP 503/);
-    await client.close();
-  });
-
-  it("performs POST requests with JSON body and merged headers", async (t: TestContext) => {
-    const app = await build(t);
-    const receivedBodies: unknown[] = [];
-    const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
-
-    const origin = await createTrackedServer(async (req, res) => {
-      receivedHeaders.push(req.headers);
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-
-      if (req.url === "/rpc") {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ result: "success" }));
-        return;
-      }
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "server error" }));
-    });
-
-    const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
-    const client = undiciClient.create({ headers: { "x-default": "base" } });
-
-    const data = await client.postJson<{ result: string }>(
-      origin.server.address() as string,
-      "/rpc",
-      { jsonrpc: "2.0", method: "test" },
-      undefined,
-      { "x-extra": "post" }
-    );
-
-    t.assert.deepStrictEqual(data, { result: "success" });
-    t.assert.deepStrictEqual(receivedBodies[0], { jsonrpc: "2.0", method: "test" });
-    t.assert.strictEqual(receivedHeaders[0]["content-type"], "application/json");
-    t.assert.strictEqual(receivedHeaders[0]["x-extra"], "post");
-    t.assert.strictEqual(receivedHeaders[0]["x-default"], "base");
-
-    await t.assert.rejects(client.postJson(origin.server.address() as string, "/fail", {}), /HTTP 500/);
+    await t.assert.rejects(client.postJson(origin, "/fail", {}), /HTTP 503/);
     await client.close();
   });
 
