@@ -47,7 +47,7 @@ test("GET /api/orders/events returns event list and cursor", async (t: TestConte
   await seedEvents(app);
 
   const res = await app.inject({
-    url: "/api/orders/events?after=0&limit=10",
+    url: "/api/orders/events?created_after=1970-01-01%2000:00:00&after_id=0&limit=10",
     method: "GET",
   });
 
@@ -56,35 +56,44 @@ test("GET /api/orders/events returns event list and cursor", async (t: TestConte
 
   t.assert.strictEqual(body.data.length, 2);
   t.assert.strictEqual(body.data[0].signature, "sig-701");
-  t.assert.strictEqual(body.cursor, body.data[1].id);
+  t.assert.deepStrictEqual(body.cursor, {
+    createdAt: body.data[1].createdAt,
+    id: body.data[1].id,
+  });
 });
 
 test("GET /api/orders/events returns empty cursor when no events", async (t: TestContext) => {
   const app = await build(t);
 
   const res = await app.inject({
-    url: "/api/orders/events?after=0&limit=10",
+    url: "/api/orders/events?created_after=1970-01-01%2000:00:00&after_id=0&limit=10",
     method: "GET",
   });
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   t.assert.deepStrictEqual(body.data, []);
-  t.assert.strictEqual(body.cursor, 0);
+  t.assert.deepStrictEqual(body.cursor, {
+    createdAt: "1970-01-01 00:00:00",
+    id: 0,
+  });
 });
 
 test("GET /api/orders/events handles repository errors", async (t: TestContext) => {
   const app = await build(t);
   const eventsRepository =
     app.getDecorator<EventsRepository>(kEventsRepository);
-  const { mock: repoMock } = t.mock.method(eventsRepository, "listAfter");
+  const { mock: repoMock } = t.mock.method(
+    eventsRepository,
+    "listAfterCreatedAt"
+  );
   repoMock.mockImplementation(() => {
     throw new Error("db down");
   });
   const { mock: logMock } = t.mock.method(app.log, "error");
 
   const res = await app.inject({
-    url: "/api/orders/events",
+    url: "/api/orders/events?created_after=1970-01-01%2000:00:00&after_id=0&limit=10",
     method: "GET",
   });
 

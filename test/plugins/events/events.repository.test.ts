@@ -41,7 +41,7 @@ describe("eventsRepository", () => {
     t.assert.strictEqual(created?.type, "outbound");
     t.assert.strictEqual(created?.payload.amount, "10");
 
-    const listed = await repo.listAfter(0, 10);
+    const listed = await repo.listAfterCreatedAt("1970-01-01 00:00:00", 0, 10);
     t.assert.strictEqual(listed.length, 1);
     t.assert.strictEqual(listed[0].id, created!.id);
   });
@@ -69,7 +69,7 @@ describe("eventsRepository", () => {
 
     t.assert.ok(first);
     t.assert.strictEqual(second, null);
-    const listed = await repo.listAfter(0, 10);
+    const listed = await repo.listAfterCreatedAt("1970-01-01 00:00:00", 0, 10);
     t.assert.strictEqual(listed.length, 1);
   });
 
@@ -98,9 +98,17 @@ describe("eventsRepository", () => {
       },
     });
 
-    const firstPage = await repo.listAfter(0, 1);
+    const firstPage = await repo.listAfterCreatedAt(
+      "1970-01-01 00:00:00",
+      0,
+      1
+    );
     t.assert.strictEqual(firstPage.length, 1);
-    const secondPage = await repo.listAfter(firstPage[0].id, 10);
+    const secondPage = await repo.listAfterCreatedAt(
+      firstPage[0].createdAt,
+      firstPage[0].id,
+      10
+    );
     t.assert.strictEqual(secondPage.length, 1);
   });
 
@@ -117,7 +125,7 @@ describe("eventsRepository", () => {
       payload: createOutboundPayload(20),
     });
 
-    const listed = await repo.listAfter(0, 10);
+    const listed = await repo.listAfterCreatedAt("1970-01-01 00:00:00", 0, 10);
     t.assert.strictEqual(listed[0].slot, undefined);
   });
 

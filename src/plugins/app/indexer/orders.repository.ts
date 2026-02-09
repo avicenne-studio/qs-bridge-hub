@@ -50,6 +50,7 @@ function normalizeStoredOrder(row: StoredOrder): StoredOrder {
   return {
     ...row,
     oracle_accept_to_relay: Boolean(row.oracle_accept_to_relay),
+    failure_reason_public: row.failure_reason_public ?? undefined,
   };
 }
 
@@ -72,6 +73,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )
@@ -115,6 +117,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )
@@ -136,6 +139,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )

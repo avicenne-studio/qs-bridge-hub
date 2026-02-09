@@ -57,9 +57,32 @@ export default fp(
             .notNullable();
           table.string("source_nonce").nullable();
           table.text("source_payload").nullable();
+          table.string("failure_reason_public").nullable();
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });
+      } else {
+        const hasOriginHash = await db.schema.hasColumn(
+          ORDERS_TABLE_NAME,
+          "origin_trx_hash"
+        );
+        if (!hasOriginHash) {
+          await db.schema.alterTable(ORDERS_TABLE_NAME, (table) => {
+            table
+              .string("origin_trx_hash", 255)
+              .notNullable()
+              .defaultTo("unknown");
+          });
+        }
+        const hasFailureReason = await db.schema.hasColumn(
+          ORDERS_TABLE_NAME,
+          "failure_reason_public"
+        );
+        if (!hasFailureReason) {
+          await db.schema.alterTable(ORDERS_TABLE_NAME, (table) => {
+            table.string("failure_reason_public").nullable();
+          });
+        }
       }
 
       const hasSignaturesTable = await db.schema.hasTable(
