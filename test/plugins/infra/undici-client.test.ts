@@ -10,7 +10,6 @@ import {
 describe("undici client plugin", () => {
   it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
     const app = await build(t);
-
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
     const server = createTrackedServer((req, res) => {
       receivedHeaders.push(req.headers);
@@ -19,7 +18,6 @@ describe("undici client plugin", () => {
         res.end(JSON.stringify({ ok: true }));
         return;
       }
-
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "boom" }));
     });
@@ -31,11 +29,8 @@ describe("undici client plugin", () => {
 
     const { port } = server.server.address() as AddressInfo;
     const origin = `http://127.0.0.1:${port}`;
-
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
-    const client = undiciClient.create({
-      headers: { "x-default": "base" },
-    });
+    const client = undiciClient.create({ headers: { "x-default": "base" } });
 
     const data = await client.getJson<{ ok: boolean }>(
       origin,
@@ -49,7 +44,7 @@ describe("undici client plugin", () => {
     t.assert.strictEqual(receivedHeaders[0]["x-default"], "override");
 
     await t.assert.rejects(client.getJson(origin, "/fail"), /HTTP 503/);
-
+    await t.assert.rejects(client.postJson(origin, "/fail", {}), /HTTP 503/);
     await client.close();
   });
 

@@ -32,6 +32,7 @@ export type NewEvent = {
 export type EventsRepository = {
   create(event: NewEvent): Promise<StoredEvent | null>;
   listAfter(afterId: number, limit: number): Promise<StoredEvent[]>;
+  findExistingSignatures(signatures: string[]): Promise<string[]>;
 };
 
 function normalizeEvent(row: PersistedEvent): StoredEvent {
@@ -91,6 +92,15 @@ function createRepository(fastify: FastifyInstance): EventsRepository {
         .orderBy("id", "asc")
         .limit(limit);
       return rows.map((row) => normalizeEvent(row));
+    },
+
+    async findExistingSignatures(signatures: string[]) {
+      if (signatures.length === 0) return [];
+      const rows = await knex<PersistedEvent>(EVENTS_TABLE_NAME)
+        .select("signature")
+        .whereIn("signature", signatures)
+        .groupBy("signature");
+      return rows.map((row) => row.signature);
     },
   };
 }

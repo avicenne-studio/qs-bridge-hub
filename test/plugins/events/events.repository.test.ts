@@ -120,4 +120,54 @@ describe("eventsRepository", () => {
     const listed = await repo.listAfter(0, 10);
     t.assert.strictEqual(listed[0].slot, undefined);
   });
+
+  describe("findExistingSignatures", () => {
+    it("returns empty array when input is empty", async (t: TestContext) => {
+      const app = await build(t);
+      const repo = app.getDecorator<EventsRepository>(kEventsRepository);
+
+      const result = await repo.findExistingSignatures([]);
+      t.assert.deepStrictEqual(result, []);
+    });
+
+    it("returns matching signatures from database", async (t: TestContext) => {
+      const app = await build(t);
+      const repo = app.getDecorator<EventsRepository>(kEventsRepository);
+
+      await repo.create({
+        signature: "sig-exists-1",
+        slot: 1,
+        chain: "solana",
+        type: "outbound",
+        nonce: hex32(30),
+        payload: createOutboundPayload(30),
+      });
+      await repo.create({
+        signature: "sig-exists-2",
+        slot: 2,
+        chain: "solana",
+        type: "outbound",
+        nonce: hex32(31),
+        payload: createOutboundPayload(31),
+      });
+
+      const result = await repo.findExistingSignatures([
+        "sig-exists-1",
+        "sig-not-found",
+        "sig-exists-2",
+      ]);
+
+      t.assert.strictEqual(result.length, 2);
+      t.assert.ok(result.includes("sig-exists-1"));
+      t.assert.ok(result.includes("sig-exists-2"));
+    });
+
+    it("returns empty array when no signatures match", async (t: TestContext) => {
+      const app = await build(t);
+      const repo = app.getDecorator<EventsRepository>(kEventsRepository);
+
+      const result = await repo.findExistingSignatures(["sig-unknown-1", "sig-unknown-2"]);
+      t.assert.deepStrictEqual(result, []);
+    });
+  });
 });
