@@ -16,3 +16,9 @@ export const AmountSchema = Type.String({
   maxLength: 78,
   pattern: '^[0-9]+$'
 })
+
+export const SolanaAddressSchema = Type.String({
+  minLength: 32,
+  maxLength: 44,
+  pattern: '^[1-9A-HJ-NP-Za-km-z]+$',
+})

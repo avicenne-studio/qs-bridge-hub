@@ -6,7 +6,7 @@ import {
   OracleChain,
   OracleOrderSchema,
 } from "../../../plugins/app/indexer/schemas/order.js";
-import { IdSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import { IdSchema, SolanaAddressSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
@@ -15,6 +15,10 @@ import { AppConfig, kConfig } from "../../../plugins/infra/env.js";
 import { StoredEventSchema } from "../../../plugins/app/events/schemas/event.js";
 import { EventsRepository, kEventsRepository } from "../../../plugins/app/events/events.repository.js";
 import { computeRequiredSignatures } from "../../../plugins/app/oracle-service.js";
+import {
+  kCostsEstimation,
+  type CostsEstimationService,
+} from "../../../plugins/app/costs-estimation.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -78,12 +82,24 @@ const EventsResponseSchema = Type.Object({
   cursor: EventsCursorSchema,
 });
 
+const SimulationBodySchema = Type.Object({
+  recipientAddress: SolanaAddressSchema,
+});
+
+const SimulationResponseSchema = Type.Object({
+  data: Type.Object({
+    estimatedCostLamports: Type.Integer({ minimum: 0 }),
+  }),
+});
+
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const ordersRepository =
     fastify.getDecorator<OrdersRepository>(kOrdersRepository);
   const config = fastify.getDecorator<AppConfig>(kConfig);
   const eventsRepository =
     fastify.getDecorator<EventsRepository>(kEventsRepository);
+  const costsEstimation =
+    fastify.getDecorator<CostsEstimationService>(kCostsEstimation);
   fastify.get(
     "/",
     {
@@ -200,6 +216,33 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         }
 
         return { data: order };
+    }
+  );
+
+  fastify.post(
+    "/simulation",
+    {
+      schema: {
+        body: SimulationBodySchema,
+        response: {
+          200: SimulationResponseSchema,
+        },
+      },
+    },
+    async function handler(request) {
+      const { recipientAddress } = request.body;
+
+      try {
+        const estimatedCostLamports =
+          await costsEstimation.estimateInboundCost(recipientAddress);
+
+        return { data: { estimatedCostLamports } };
+      } catch (error) {
+        fastify.log.error({ err: error }, "Failed to estimate inbound cost");
+        throw fastify.httpErrors.internalServerError(
+          "Failed to estimate inbound cost",
+        );
+      }
     }
   );
 };

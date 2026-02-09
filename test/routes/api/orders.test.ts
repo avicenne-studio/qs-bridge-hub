@@ -4,6 +4,10 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
+import {
+  kCostsEstimation,
+  type CostsEstimationService,
+} from "../../../src/plugins/app/costs-estimation.js";
 
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -176,6 +180,72 @@ test("GET /api/orders handles repository errors", async (t: TestContext) => {
   const [logPayload, logMsg] = logMock.calls[0].arguments as any;
   t.assert.strictEqual(logMsg, "Failed to list orders");
   t.assert.strictEqual(logPayload.err.message, "db down");
+
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.message, "Internal Server Error");
+});
+
+test("POST /api/orders/simulation returns estimated cost", async (t: TestContext) => {
+  const app = await build(t);
+  const costsEstimation =
+    app.getDecorator<CostsEstimationService>(kCostsEstimation);
+  const { mock } = t.mock.method(costsEstimation, "estimateInboundCost");
+  mock.mockImplementation(() => Promise.resolve(3_199_640));
+
+  const res = await app.inject({
+    url: "/api/orders/simulation",
+    method: "POST",
+    payload: {
+      recipientAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
+    },
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.estimatedCostLamports, 3_199_640);
+  t.assert.strictEqual(mock.callCount(), 1);
+  t.assert.strictEqual(
+    mock.calls[0].arguments[0],
+    "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
+  );
+});
+
+test("POST /api/orders/simulation returns 400 for invalid address", async (t: TestContext) => {
+  const app = await build(t);
+
+  const res = await app.inject({
+    url: "/api/orders/simulation",
+    method: "POST",
+    payload: {
+      recipientAddress: "not-a-valid-base58!",
+    },
+  });
+
+  t.assert.strictEqual(res.statusCode, 400);
+});
+
+test("POST /api/orders/simulation returns 500 on service error", async (t: TestContext) => {
+  const app = await build(t);
+  const costsEstimation =
+    app.getDecorator<CostsEstimationService>(kCostsEstimation);
+  const { mock } = t.mock.method(costsEstimation, "estimateInboundCost");
+  mock.mockImplementation(() => Promise.reject(new Error("RPC unreachable")));
+
+  const { mock: logMock } = t.mock.method(app.log, "error");
+
+  const res = await app.inject({
+    url: "/api/orders/simulation",
+    method: "POST",
+    payload: {
+      recipientAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
+    },
+  });
+
+  t.assert.strictEqual(res.statusCode, 500);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [logPayload, logMsg] = logMock.calls[0].arguments as any;
+  t.assert.strictEqual(logMsg, "Failed to estimate inbound cost");
+  t.assert.strictEqual(logPayload.err.message, "RPC unreachable");
 
   const body = JSON.parse(res.payload);
   t.assert.strictEqual(body.message, "Internal Server Error");
