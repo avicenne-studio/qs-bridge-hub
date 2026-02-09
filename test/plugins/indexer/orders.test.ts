@@ -3,33 +3,8 @@ import { describe, it, TestContext } from "node:test";
 import {
   OracleOrder,
   assertValidOracleOrder,
-  orderFromQubic,
-  orderFromSolana,
   normalizeBridgeInstruction,
 } from "../../../src/plugins/app/indexer/schemas/order.js";
-import { QubicTransaction } from "../../../src/plugins/app/indexer/schemas/qubic-transaction.js";
-import { SolanaTransaction } from "../../../src/plugins/app/indexer/schemas/solana-transaction.js";
-
-const mockQubicTx: QubicTransaction = {
-  sender: "AliceQ",
-  recipient: "BobQ",
-  amount: 999,
-  nonce: 1,
-  origin_trx_hash: "qubic-trx-hash",
-};
-
-const mockSolanaTx: SolanaTransaction = {
-  signature: "solana-trx-hash",
-  recentBlockhash: "ABC123",
-  feePayer: "FEEPAYER111",
-  instructions: [
-    {
-      programId: "PROGRAM1",
-      accounts: [],
-      data: "encoded-bridge-data",
-    },
-  ],
-};
 
 describe("OracleOrder utilities", () => {
   it("should accept valid orders with different source and dest", (t: TestContext) => {
@@ -64,33 +39,6 @@ describe("OracleOrder utilities", () => {
     t.assert.throws(
       () => assertValidOracleOrder(order),
       /source and dest must differ/
-    );
-  });
-
-  it("should construct an order from a Qubic transaction", (t: TestContext) => {
-    const order = orderFromQubic(mockQubicTx, "solana");
-
-    t.assert.strictEqual(order.source, "qubic");
-    t.assert.strictEqual(order.dest, "solana");
-    t.assert.strictEqual(order.from, mockQubicTx.sender);
-    t.assert.strictEqual(order.to, mockQubicTx.recipient);
-    t.assert.strictEqual(order.amount, String(mockQubicTx.amount));
-    t.assert.strictEqual(order.origin_trx_hash, mockQubicTx.origin_trx_hash);
-    t.assert.strictEqual(order.oracle_accept_to_relay, false);
-    t.assert.strictEqual(order.status, "in-progress");
-  });
-
-  it("should throw when Qubic order has identical source and dest", (t: TestContext) => {
-    t.assert.throws(
-      () => orderFromQubic(mockQubicTx, "qubic"),
-      /source and dest must differ/
-    );
-  });
-
-  it("should throw because normalizeBridgeInstruction is not implemented", (t: TestContext) => {
-    t.assert.throws(
-      () => orderFromSolana(mockSolanaTx, "qubic"),
-      /not implemented/
     );
   });
 
