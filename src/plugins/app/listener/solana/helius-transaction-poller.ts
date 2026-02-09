@@ -73,7 +73,7 @@ export function createDefaultHeliusFetcher(
     );
 
     if (response.error) {
-      throw new Error(response.error.message);
+      throw response.error;
     }
 
     return response.result?.data ?? [];
@@ -117,54 +117,24 @@ export default fp(
       ),
     );
 
-    const extractDecodedEvents = (
-      logMessages: string[],
-      txSignature: string,
-    ) => {
-      return logLinesToEvents(logMessages)
-        .map(decodeEventBytes)
-        .filter((decoded): decoded is NonNullable<typeof decoded> => {
-          if (
-            decoded &&
-            (decoded.type === "outbound" ||
-              decoded.type === "override-outbound")
-          ) {
-            return true;
-          }
-
-          if (decoded) {
-            fastify.log.warn(
-              { type: decoded.type, sig: txSignature },
-              "Unhandled event type",
-            );
-          }
-
-          return false;
-        });
-    };
-
-    const handleEvent = async (
-      decoded: NonNullable<ReturnType<typeof decodeEventBytes>>,
-      txMeta: { signature: string; slot: number },
-    ) => {
-      if (decoded.type === "outbound") {
-        await handleOutboundEvent(decoded.event, txMeta);
-      } else if (decoded.type === "override-outbound") {
-        await handleOverrideOutboundEvent(decoded.event, txMeta);
-      }
-    };
-
     const processTransaction = async (tx: HeliusTransaction) => {
       if (tx.meta.err || !tx.meta.logMessages) return;
 
-      const decodedEvents = extractDecodedEvents(
-        tx.meta.logMessages,
-        tx.signature,
+      const decodedEvents = logLinesToEvents(tx.meta.logMessages).map(
+        decodeEventBytes,
       );
       const txMeta = { signature: tx.signature, slot: tx.slot };
 
       for (const decoded of decodedEvents) {
-        await handleEvent(decoded, txMeta);
+        if (!decoded) continue;
+
+        if (decoded.type === "outbound") {
+          await handleOutboundEvent(decoded.event, txMeta);
+        } else if (decoded.type === "override-outbound") {
+          await handleOverrideOutboundEvent(decoded.event, txMeta);
+        } else {
+          fastify.log.info(`Unhandled event ${decoded.type}`);
+        }
       }
     };
 
@@ -181,7 +151,7 @@ export default fp(
 
       if (newTransactions.length > 0) {
         fastify.log.info(
-          { count: newTransactions.length, total: transactions.length },
+          { added: newTransactions.length, total: transactions.length },
           "Helius poller fetched",
         );
         await Promise.allSettled(
@@ -198,11 +168,10 @@ export default fp(
       },
       intervalMs: config.HELIUS_POLLER_INTERVAL_MS,
       requestTimeoutMs: config.HELIUS_POLLER_TIMEOUT_MS,
-      jitterMs: 0,
+      jitterMs: pollerService.defaults.jitterMs,
     });
 
     fastify.addHook("onReady", function startPoller() {
-      fastify.log.info("Helius poller started");
       poller.start();
     });
   },

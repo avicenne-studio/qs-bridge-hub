@@ -1,17 +1,15 @@
 import { describe, it, TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { AddressInfo } from "node:net";
-import { createServer } from "node:http";
+import type { RequestListener } from "node:http";
 import { Buffer } from "node:buffer";
 import fastify from "fastify";
 import fp from "fastify-plugin";
 import {
   type HeliusTransaction,
-  createDefaultHeliusFetcher,
   kHeliusFetcher,
 } from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
 import heliusTransactionPoller from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
-import { UndiciClient } from "../../../../src/plugins/infra/undici-client.js";
 import { createTrackedServer } from "../../../helpers/http-server.js";
 import pollerPlugin from "../../../../src/plugins/infra/poller.js";
 import undiciClientPlugin from "../../../../src/plugins/infra/undici-client.js";
@@ -22,6 +20,7 @@ import {
   toLogLine,
   createInMemoryEventsRepository,
 } from "../../../helpers/solana-events.js";
+import { waitFor } from "../../../helpers/wait-for.js";
 
 function createTransaction(
   signature: string,
@@ -32,76 +31,24 @@ function createTransaction(
   return { signature, slot, meta: { err, logMessages } };
 }
 
-async function waitFor(
-  condition: () => boolean,
-  timeoutMs = 2000,
-): Promise<void> {
-  const start = Date.now();
-  while (!condition()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error(`waitFor timed out after ${timeoutMs}ms`);
-    }
-    await new Promise((r) => setTimeout(r, 5));
-  }
+function heliusJsonHandler(data: HeliusTransaction[]): RequestListener {
+  return (_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ result: { data } }));
+  };
 }
 
-describe("createDefaultHeliusFetcher", () => {
-  async function createMockHelius(t: TestContext, response: unknown) {
-    const receivedBodies: unknown[] = [];
-    const server = createServer(async (req, res) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk);
-      receivedBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(response));
-    });
-    await new Promise<void>((resolve) => server.listen(0, resolve));
-    t.after(() => server.close());
-    const { port } = server.address() as AddressInfo;
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    return { port, client, receivedBodies };
-  }
-
-  it("calls getTransactionsForAddress and returns result", async (t: TestContext) => {
-    const { port, client, receivedBodies } = await createMockHelius(t, {
-      result: { data: [{ signature: "sig1", slot: 100, meta: { err: null, logMessages: [] } }] },
-    });
-
-    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
-    const result = await fetcher(new AbortController().signal);
-
-    assert.strictEqual(result.length, 1);
-    assert.strictEqual(result[0].signature, "sig1");
-    assert.strictEqual((receivedBodies[0] as { method: string }).method, "getTransactionsForAddress");
-  });
-
-  it("throws on RPC error response", async (t: TestContext) => {
-    const { port, client } = await createMockHelius(t, { error: { message: "Rate limited" } });
-    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
-
-    await assert.rejects(fetcher(new AbortController().signal), /Rate limited/);
-  });
-
-  it("returns empty array when result.data is missing", async (t: TestContext) => {
-    const { port, client } = await createMockHelius(t, { result: {} });
-    const fetcher = createDefaultHeliusFetcher(client, `http://127.0.0.1:${port}`, 600);
-
-    assert.deepStrictEqual(await fetcher(new AbortController().signal), []);
-  });
-});
+async function createHeliusServer(
+  t: TestContext,
+  handler: RequestListener,
+) {
+  const server = createTrackedServer(handler);
+  await new Promise<void>((resolve) => server.server.listen(0, resolve));
+  t.after(() => server.close());
+  return server.server.address() as AddressInfo;
+}
 
 describe("helius poller plugin", () => {
-  async function createMockHeliusServer(t: TestContext, getTransactions: () => HeliusTransaction[]) {
-    const server = createTrackedServer((req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ result: { data: getTransactions() } }));
-    });
-    await new Promise<void>((resolve) => server.server.listen(0, resolve));
-    t.after(() => server.close());
-    return server.server.address() as AddressInfo;
-  }
-
   async function buildApp(
     t: TestContext,
     heliusUrl: string,
@@ -135,9 +82,9 @@ describe("helius poller plugin", () => {
   }
 
   it("processes outbound event from Helius response", async (t: TestContext) => {
-    const { port } = await createMockHeliusServer(t, () => [
+    const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-outbound", 500, [toLogLine(createEventBytes("outbound"))]),
-    ]);
+    ]));
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
@@ -149,11 +96,11 @@ describe("helius poller plugin", () => {
   });
 
   it("filters out inbound events, keeps outbound and override-outbound", async (t: TestContext) => {
-    const { port } = await createMockHeliusServer(t, () => [
+    const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-1", 100, [toLogLine(createEventBytes("outbound"))]),
       createTransaction("sig-2", 200, [toLogLine(createEventBytes("override"))]),
       createTransaction("sig-3", 300, [toLogLine(createEventBytes("inbound"))]),
-    ]);
+    ]));
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
@@ -165,10 +112,10 @@ describe("helius poller plugin", () => {
   });
 
   it("skips transactions with meta.err", async (t: TestContext) => {
-    const { port } = await createMockHeliusServer(t, () => [
+    const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-err", 100, [toLogLine(createEventBytes("outbound"))], { err: "failed" }),
       createTransaction("sig-ok", 200, [toLogLine(createEventBytes("outbound"))]),
-    ]);
+    ]));
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
@@ -189,10 +136,10 @@ describe("helius poller plugin", () => {
       payload: { amount: "100", recipient: "r", sender: "s" },
     });
 
-    const { port } = await createMockHeliusServer(t, () => [
+    const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-existing", 100, [toLogLine(createEventBytes("outbound"))]),
       createTransaction("sig-new", 200, [toLogLine(createEventBytes("outbound"))]),
-    ]);
+    ]));
 
     await buildApp(t, `http://127.0.0.1:${port}`, eventsRepo);
 
@@ -202,16 +149,42 @@ describe("helius poller plugin", () => {
     assert.strictEqual(eventsRepo.store[1].signature, "sig-new");
   });
 
+  it("handles empty result.data gracefully", async (t: TestContext) => {
+    let requestCount = 0;
+    const { port } = await createHeliusServer(t, (_req, res) => {
+      requestCount++;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ result: {} }));
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => requestCount >= 2);
+
+    assert.strictEqual(eventsRepo.store.length, 0);
+  });
+
+  it("skips undecoded log entries", async (t: TestContext) => {
+    const invalidLog = "Program data: " + Buffer.from(new Uint8Array([255, 1, 2])).toString("base64");
+    const { port } = await createHeliusServer(t, heliusJsonHandler([
+      createTransaction("sig-invalid", 100, [invalidLog, toLogLine(createEventBytes("outbound"))]),
+    ]));
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    assert.strictEqual(eventsRepo.store.length, 1);
+    assert.strictEqual(eventsRepo.store[0].signature, "sig-invalid");
+  });
+
   it("does nothing when HELIUS_POLLER_ENABLED is false", async (t: TestContext) => {
     let requestCount = 0;
-    const server = createTrackedServer((_req, res) => {
+    const { port } = await createHeliusServer(t, (_req, res) => {
       requestCount++;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ result: { data: [] } }));
     });
-    await new Promise<void>((resolve) => server.server.listen(0, resolve));
-    t.after(() => server.close());
-    const { port } = server.server.address() as AddressInfo;
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`, undefined, { enabled: false });
 
@@ -223,7 +196,7 @@ describe("helius poller plugin", () => {
 
   it("does not duplicate events across multiple poller rounds", async (t: TestContext) => {
     let requestCount = 0;
-    const server = createTrackedServer((_req, res) => {
+    const { port } = await createHeliusServer(t, (_req, res) => {
       requestCount++;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
@@ -232,9 +205,6 @@ describe("helius poller plugin", () => {
         },
       }));
     });
-    await new Promise<void>((resolve) => server.server.listen(0, resolve));
-    t.after(() => server.close());
-    const { port } = server.server.address() as AddressInfo;
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
@@ -246,7 +216,7 @@ describe("helius poller plugin", () => {
 
   it("survives a network error and processes the next round", async (t: TestContext) => {
     let requestCount = 0;
-    const server = createTrackedServer((req, res) => {
+    const { port } = await createHeliusServer(t, (req, res) => {
       requestCount++;
       if (requestCount === 1) {
         req.socket.destroy();
@@ -259,13 +229,33 @@ describe("helius poller plugin", () => {
         },
       }));
     });
-    await new Promise<void>((resolve) => server.server.listen(0, resolve));
-    t.after(() => server.close());
-    const { port } = server.server.address() as AddressInfo;
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
     await waitFor(() => eventsRepo.store.some((e) => e.signature === "sig-after-error"));
+
+    assert.ok(requestCount >= 2, "server should have received at least 2 requests");
+  });
+
+  it("survives an RPC error and processes the next round", async (t: TestContext) => {
+    let requestCount = 0;
+    const { port } = await createHeliusServer(t, (_req, res) => {
+      requestCount++;
+      res.writeHead(200, { "content-type": "application/json" });
+      if (requestCount === 1) {
+        res.end(JSON.stringify({ error: { message: "Rate limited" } }));
+        return;
+      }
+      res.end(JSON.stringify({
+        result: {
+          data: [createTransaction("sig-after-rpc-error", 300, [toLogLine(createEventBytes("outbound"))])],
+        },
+      }));
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.some((e) => e.signature === "sig-after-rpc-error"));
 
     assert.ok(requestCount >= 2, "server should have received at least 2 requests");
   });
