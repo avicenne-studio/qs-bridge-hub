@@ -144,4 +144,9 @@ export const autoConfig = {
  *
  * @see {@link https://github.com/fastify/fastify-env}
  */
-export default fp(env, { name: 'env' })
+export default fp(async function envPlugin(fastify, opts) {
+  if (fastify.hasDecorator(kConfig)) {
+    return;
+  }
+  await fastify.register(env, opts);
+}, { name: 'env' })

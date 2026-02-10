@@ -9,7 +9,7 @@ import {
 
 describe("undici client plugin", () => {
   it("performs GET requests with merged headers and JSON parsing", async (t: TestContext) => {
-    const app = await build(t);
+    const app = await build(t, { useMocks: false });
     const receivedHeaders: Record<string, string | string[] | undefined>[] = [];
     const server = createTrackedServer((req, res) => {
       receivedHeaders.push(req.headers);
@@ -49,7 +49,7 @@ describe("undici client plugin", () => {
   });
 
   it("closes created clients on app shutdown and exposes defaults", async (t: TestContext) => {
-    const app = await build();
+    const app = await build(undefined, { useMocks: false });
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 
     t.assert.deepStrictEqual(undiciClient.defaults, {

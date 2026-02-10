@@ -107,6 +107,9 @@ function createRepository(fastify: FastifyInstance): EventsRepository {
 
 export default fp(
   function eventsRepositoryPlugin(fastify) {
+    if (fastify.hasDecorator(kEventsRepository)) {
+      return;
+    }
     fastify.decorate(kEventsRepository, createRepository(fastify));
   },
   {

@@ -35,10 +35,7 @@ type WebSocketLike = {
 
 type WebSocketFactory = (url: string) => WebSocketLike;
 
-type SolanaWsFactoryOwner = {
-  solanaWsFactory?: WebSocketFactory;
-  parent?: SolanaWsFactoryOwner;
-};
+export const kSolanaWsFactory = Symbol("app.solanaWsFactory");
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -70,14 +67,13 @@ export function createDefaultSolanaWsFactory(
 }
 
 export function resolveSolanaWsFactory(
-  instance: SolanaWsFactoryOwner,
+  instance: FastifyInstance,
   defaultFactory: WebSocketFactory
 ): WebSocketFactory {
-  return (
-    instance.solanaWsFactory ??
-    instance.parent?.solanaWsFactory ??
-    defaultFactory
-  );
+  if (instance.hasDecorator(kSolanaWsFactory)) {
+    return instance.getDecorator<WebSocketFactory>(kSolanaWsFactory);
+  }
+  return defaultFactory;
 }
 
 export default fp(
@@ -308,12 +304,8 @@ export default fp(
     };
 
     fastify.addHook("onReady", async () => {
-      const instance = fastify as FastifyInstance & {
-        solanaWsFactory?: WebSocketFactory;
-        parent?: FastifyInstance & { solanaWsFactory?: WebSocketFactory };
-      };
       wsFactory = resolveSolanaWsFactory(
-        instance,
+        fastify,
         createDefaultSolanaWsFactory()
       );
       wsUrl = config.SOLANA_WS_URL;
