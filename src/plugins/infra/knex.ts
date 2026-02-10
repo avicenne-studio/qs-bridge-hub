@@ -55,8 +55,9 @@ export default fp(
           table
             .string("origin_trx_hash", 255)
             .notNullable();
-          table.string("source_nonce").nullable();
-          table.text("source_payload").nullable();
+          table.string("source_nonce").notNullable();
+          table.text("source_payload").notNullable();
+          table.string("failure_reason_public").nullable();
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
         });

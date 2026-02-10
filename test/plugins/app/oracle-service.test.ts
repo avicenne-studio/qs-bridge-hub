@@ -44,6 +44,8 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,

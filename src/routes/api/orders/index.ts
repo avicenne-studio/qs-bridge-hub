@@ -63,13 +63,19 @@ const RelayableSignaturesSchema = Type.Object({
 });
 
 const EventsQueryParamsSchema = Type.Object({
-  after: Type.Integer({ minimum: 0, default: 0 }),
+  created_after: StringSchema,
+  after_id: Type.Integer({ minimum: 0, default: 0 }),
   limit: Type.Integer({ minimum: 1, maximum: 100, default: 50 }),
+});
+
+const EventsCursorSchema = Type.Object({
+  createdAt: StringSchema,
+  id: Type.Integer({ minimum: 0 }),
 });
 
 const EventsResponseSchema = Type.Object({
   data: Type.Array(StoredEventSchema),
-  cursor: Type.Integer({ minimum: 0 }),
+  cursor: EventsCursorSchema,
 });
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
@@ -157,10 +163,17 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler(request) {
-      const { after, limit } = request.query;
+      const { created_after, after_id, limit } = request.query;
       try {
-        const events = await eventsRepository.listAfter(after, limit);
-        const cursor = events.length > 0 ? events[events.length - 1].id : after;
+        const events = await eventsRepository.listAfterCreatedAt(
+          created_after,
+          after_id,
+          limit
+        );
+        const last = events.length > 0 ? events[events.length - 1] : null;
+        const cursor = last
+          ? { createdAt: last.createdAt, id: last.id }
+          : { createdAt: created_after, id: after_id };
         return { data: events, cursor };
       } catch (error) {
         fastify.log.error({ err: error }, "Failed to list events");

@@ -50,6 +50,7 @@ function normalizeStoredOrder(row: StoredOrder): StoredOrder {
   return {
     ...row,
     oracle_accept_to_relay: Boolean(row.oracle_accept_to_relay),
+    failure_reason_public: row.failure_reason_public ?? undefined,
   };
 }
 
@@ -72,6 +73,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )
@@ -115,6 +117,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )
@@ -136,6 +139,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
+          "failure_reason_public",
           "oracle_accept_to_relay",
           "status"
         )
@@ -145,7 +149,16 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async create(newOrder: CreateOrder) {
-      await knex<PersistedOrder>(ORDERS_TABLE_NAME).insert(newOrder);
+      const sourceNonce =
+        newOrder.source_nonce ?? `${newOrder.origin_trx_hash}-${newOrder.id}`;
+      const sourcePayload =
+        newOrder.source_payload ??
+        JSON.stringify({ origin_trx_hash: newOrder.origin_trx_hash });
+      await knex<PersistedOrder>(ORDERS_TABLE_NAME).insert({
+        ...newOrder,
+        source_nonce: sourceNonce,
+        source_payload: sourcePayload,
+      });
       return this.findById(newOrder.id);
     },
 
