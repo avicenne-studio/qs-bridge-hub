@@ -6,6 +6,8 @@ export type AppConfig = {
   HOST: string;
   RATE_LIMIT_MAX: number;
   POLLER_INTERVAL_MS: number;
+  POLLER_REQUEST_TIMEOUT_MS: number;
+  POLLER_JITTER_MS: number;
   SQLITE_DB_FILE: string;
   ORACLE_URLS: string;
   ORACLE_SIGNATURE_THRESHOLD: number;
@@ -19,6 +21,9 @@ export type AppConfig = {
   HELIUS_POLLER_INTERVAL_MS: number;
   HELIUS_POLLER_LOOKBACK_SECONDS: number;
   HELIUS_POLLER_TIMEOUT_MS: number;
+  SOLANA_WS_RECONNECT_BASE_MS: number;
+  SOLANA_WS_RECONNECT_MAX_MS: number;
+  SOLANA_WS_FALLBACK_RETRY_MS: number;
 };
 
 export const kConfig = 'config'
@@ -51,6 +56,16 @@ const schema = {
       type: 'number',
       minimum: 1000,
       default: 10_000
+    },
+    POLLER_REQUEST_TIMEOUT_MS: {
+      type: 'number',
+      minimum: 0,
+      default: 700
+    },
+    POLLER_JITTER_MS: {
+      type: 'number',
+      minimum: 0,
+      default: 25
     },
     SQLITE_DB_FILE: {
       type: 'string',
@@ -114,6 +129,21 @@ const schema = {
       type: 'number',
       minimum: 1000,
       default: 30_000
+    },
+    SOLANA_WS_RECONNECT_BASE_MS: {
+      type: 'number',
+      minimum: 0,
+      default: 1000
+    },
+    SOLANA_WS_RECONNECT_MAX_MS: {
+      type: 'number',
+      minimum: 0,
+      default: 30_000
+    },
+    SOLANA_WS_FALLBACK_RETRY_MS: {
+      type: 'number',
+      minimum: 0,
+      default: 60_000
     }
   }
 }

@@ -255,7 +255,7 @@ export default fp(
           fastify.log.info("Attempting to switch back to primary WebSocket");
           ws.close();
         }
-      }, RETRY_PRIMARY_WS_TIMER_MS);
+      }, config.SOLANA_WS_FALLBACK_RETRY_MS);
     };
 
     const scheduleReconnect = () => {
@@ -275,7 +275,10 @@ export default fp(
         reconnectAttempt = 0;
       }
       
-      const delayMs = Math.min(30_000, 1000 * 2 ** reconnectAttempt);
+      const delayMs = Math.min(
+        config.SOLANA_WS_RECONNECT_MAX_MS,
+        config.SOLANA_WS_RECONNECT_BASE_MS * 2 ** reconnectAttempt
+      );
       reconnectAttempt += 1;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;

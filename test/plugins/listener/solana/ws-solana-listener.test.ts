@@ -436,7 +436,7 @@ describe("ws solana listener plugin", () => {
     const first = sockets[0];
     assert.ok(first);
     first.emit("close", {});
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     assert.strictEqual(sockets.length, 1);
     await app.close();
   });

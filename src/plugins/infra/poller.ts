@@ -148,8 +148,8 @@ export default fp(
     const config = fastify.getDecorator<AppConfig>(kConfig);
     const defaults: Readonly<PollerOptions> = Object.freeze({
       intervalMs: config.POLLER_INTERVAL_MS,
-      requestTimeoutMs: 700,
-      jitterMs: 25,
+      requestTimeoutMs: config.POLLER_REQUEST_TIMEOUT_MS,
+      jitterMs: config.POLLER_JITTER_MS,
     });
     const handles = new Set<PollerHandle>();
 
