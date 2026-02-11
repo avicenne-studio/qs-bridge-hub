@@ -23,7 +23,7 @@ function closeServer(entry: TrackedServer) {
 
 describe("poller plugin", () => {
   it("collects only successful responses per round", async (t: TestContext) => {
-    const app = await build(t);
+    const app = await build(t, { useMocks: false });
     const pollerService = app.getDecorator<PollerService>(kPoller);
 
     const servers = ["ok-1", "ok-2", "fail"] as const;
@@ -75,7 +75,7 @@ describe("poller plugin", () => {
   });
 
   it("aborts slow servers and exposes defaults", async (t: TestContext) => {
-    const app = await build(t);
+    const app = await build(t, { useMocks: false });
     const pollerService = app.getDecorator<PollerService>(kPoller);
 
     const abortedServers: string[] = [];
@@ -124,7 +124,7 @@ describe("poller plugin", () => {
   });
 
   it("throws when start is invoked twice", async (t: TestContext) => {
-    const app = await build(t);
+    const app = await build(t, { useMocks: false });
     const pollerService = app.getDecorator<PollerService>(kPoller);
 
     const poller = pollerService.create({
@@ -145,7 +145,7 @@ describe("poller plugin", () => {
   it(
     "integrates with the Undici GET client transport across multiple servers",
     async (t: TestContext) => {
-    const app = await build(t);
+    const app = await build(t, { useMocks: false });
     const pollerService = app.getDecorator<PollerService>(kPoller);
     const undiciClient = app.getDecorator<UndiciClientService>(kUndiciClient);
 

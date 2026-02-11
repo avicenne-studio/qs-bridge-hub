@@ -2,8 +2,8 @@
 
 export async function waitFor(
   condition: () => boolean | Promise<boolean>,
-  timeoutMs = 5_000,
-  intervalMs = 100
+  timeoutMs = 2_000,
+  intervalMs = 50
 ) {
   const start = Date.now();
   while (true) {

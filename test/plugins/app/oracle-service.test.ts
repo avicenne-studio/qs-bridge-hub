@@ -214,7 +214,10 @@ function assertSignedHeaders(
 }
 
 async function withApp(t: TestContext) {
-  const app = await build(t);
+  const app = await build(t, {
+    useMocks: false,
+    config: { ORACLE_URLS: ORACLE_URLS.join(","), ORACLE_COUNT: ORACLE_URLS.length },
+  });
   return app;
 }
 

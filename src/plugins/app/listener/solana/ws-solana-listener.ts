@@ -35,10 +35,7 @@ type WebSocketLike = {
 
 type WebSocketFactory = (url: string) => WebSocketLike;
 
-type SolanaWsFactoryOwner = {
-  solanaWsFactory?: WebSocketFactory;
-  parent?: SolanaWsFactoryOwner;
-};
+export const kSolanaWsFactory = Symbol("app.solanaWsFactory");
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -70,14 +67,13 @@ export function createDefaultSolanaWsFactory(
 }
 
 export function resolveSolanaWsFactory(
-  instance: SolanaWsFactoryOwner,
+  instance: FastifyInstance,
   defaultFactory: WebSocketFactory
 ): WebSocketFactory {
-  return (
-    instance.solanaWsFactory ??
-    instance.parent?.solanaWsFactory ??
-    defaultFactory
-  );
+  if (instance.hasDecorator(kSolanaWsFactory)) {
+    return instance.getDecorator<WebSocketFactory>(kSolanaWsFactory);
+  }
+  return defaultFactory;
 }
 
 export default fp(
@@ -259,7 +255,7 @@ export default fp(
           fastify.log.info("Attempting to switch back to primary WebSocket");
           ws.close();
         }
-      }, RETRY_PRIMARY_WS_TIMER_MS);
+      }, config.SOLANA_WS_FALLBACK_RETRY_MS);
     };
 
     const scheduleReconnect = () => {
@@ -279,7 +275,10 @@ export default fp(
         reconnectAttempt = 0;
       }
       
-      const delayMs = Math.min(30_000, 1000 * 2 ** reconnectAttempt);
+      const delayMs = Math.min(
+        config.SOLANA_WS_RECONNECT_MAX_MS,
+        config.SOLANA_WS_RECONNECT_BASE_MS * 2 ** reconnectAttempt
+      );
       reconnectAttempt += 1;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
@@ -308,12 +307,8 @@ export default fp(
     };
 
     fastify.addHook("onReady", async () => {
-      const instance = fastify as FastifyInstance & {
-        solanaWsFactory?: WebSocketFactory;
-        parent?: FastifyInstance & { solanaWsFactory?: WebSocketFactory };
-      };
       wsFactory = resolveSolanaWsFactory(
-        instance,
+        fastify,
         createDefaultSolanaWsFactory()
       );
       wsUrl = config.SOLANA_WS_URL;

@@ -3,24 +3,19 @@ import assert from "node:assert/strict";
 import { AddressInfo } from "node:net";
 import type { RequestListener } from "node:http";
 import { Buffer } from "node:buffer";
-import fastify from "fastify";
-import fp from "fastify-plugin";
 import {
   type HeliusTransaction,
   kHeliusFetcher,
 } from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
-import heliusTransactionPoller from "../../../../src/plugins/app/listener/solana/helius-transaction-poller.js";
 import { createTrackedServer } from "../../../helpers/http-server.js";
-import pollerPlugin from "../../../../src/plugins/infra/poller.js";
-import undiciClientPlugin from "../../../../src/plugins/infra/undici-client.js";
 import { kEventsRepository } from "../../../../src/plugins/app/events/events.repository.js";
-import { kConfig } from "../../../../src/plugins/infra/env.js";
 import {
   createEventBytes,
   toLogLine,
   createInMemoryEventsRepository,
 } from "../../../helpers/solana-events.js";
 import { waitFor } from "../../../helpers/wait-for.js";
+import { build } from "../../../helpers/build.js";
 
 function createTransaction(
   signature: string,
@@ -55,28 +50,20 @@ describe("helius poller plugin", () => {
     eventsRepo = createInMemoryEventsRepository(),
     opts: { enabled?: boolean } = {},
   ) {
-    const app = fastify({ logger: false });
-
-    app.register(fp(async (instance) => {
-      instance.decorate(kConfig, {
+    const app = await build(t, {
+      useMocks: false,
+      config: {
         HELIUS_POLLER_ENABLED: opts.enabled ?? true,
         HELIUS_RPC_URL: heliusUrl,
         HELIUS_POLLER_INTERVAL_MS: 10,
         HELIUS_POLLER_LOOKBACK_SECONDS: 60,
         HELIUS_POLLER_TIMEOUT_MS: 1000,
-      });
-    }, { name: "env" }));
-
-    app.register(fp(async (instance) => {
-      instance.decorate(kEventsRepository, eventsRepo);
-    }, { name: "events-repository" }));
-
-    app.register(pollerPlugin);
-    app.register(undiciClientPlugin);
-    app.register(heliusTransactionPoller);
-
-    await app.ready();
-    t.after(() => app.close());
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+      },
+    });
 
     return { app, eventsRepo };
   }
@@ -265,31 +252,22 @@ describe("helius poller plugin", () => {
       createTransaction("custom-sig", 999, [toLogLine(createEventBytes("outbound"))]),
     ];
 
-    const app = fastify({ logger: false });
-
-    app.register(fp(async (instance) => {
-      instance.decorate(kConfig, {
+    const eventsRepo = createInMemoryEventsRepository();
+    await build(t, {
+      useMocks: false,
+      config: {
         HELIUS_POLLER_ENABLED: true,
         HELIUS_RPC_URL: "http://unused",
         HELIUS_POLLER_INTERVAL_MS: 10,
         HELIUS_POLLER_LOOKBACK_SECONDS: 60,
         HELIUS_POLLER_TIMEOUT_MS: 1000,
-      });
-    }, { name: "env" }));
-
-    const eventsRepo = createInMemoryEventsRepository();
-    app.register(fp(async (instance) => {
-      instance.decorate(kEventsRepository, eventsRepo);
-    }, { name: "events-repository" }));
-
-    app.decorate(kHeliusFetcher, async () => customTransactions);
-
-    app.register(pollerPlugin);
-    app.register(undiciClientPlugin);
-    app.register(heliusTransactionPoller);
-
-    await app.ready();
-    t.after(() => app.close());
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kHeliusFetcher]: async () => customTransactions,
+      },
+    });
 
     await waitFor(() => eventsRepo.store.length >= 1);
 
