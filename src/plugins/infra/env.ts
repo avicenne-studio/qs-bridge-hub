@@ -147,7 +147,6 @@ const schema = {
       minimum: 0,
       default: 60_000
     },
-
     TOKEN_MINT: {
       type: 'string',
     }
