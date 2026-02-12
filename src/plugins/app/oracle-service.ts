@@ -30,8 +30,8 @@ type OracleStatus = "ok" | "down";
 export type OracleHealthRecord = {
   status: OracleStatus;
   timestamp: string;
-  relayerFeeSolana: string | null;
-  relayerFeeQubic: string | null;
+  relayerFeeSolana: bigint;
+  relayerFeeQubic: bigint;
 };
 
 export type OracleHealthEntry = {
@@ -80,13 +80,20 @@ type OracleOrdersPayload =
   | OracleOrderWithSignature[]
   | { data: OracleOrderWithSignature[] };
 
+function parseRelayerFee(value?: string): bigint {
+  if (!value || !/^[0-9]+$/.test(value)) {
+    return 0n;
+  }
+  return BigInt(value);
+}
+
 function normalizeHealth(payload: OracleHealthPayload): OracleHealthRecord {
   const status: OracleStatus = payload.status === "ok" ? "ok" : "down";
   return {
     status,
     timestamp: payload.timestamp ?? new Date().toISOString(),
-    relayerFeeSolana: payload.relayerFeeSolana ?? null,
-    relayerFeeQubic: payload.relayerFeeQubic ?? null,
+    relayerFeeSolana: parseRelayerFee(payload.relayerFeeSolana),
+    relayerFeeQubic: parseRelayerFee(payload.relayerFeeQubic),
   };
 }
 
@@ -98,8 +105,8 @@ function createOracleService(urls: string[]): OracleServiceCore {
     registry.set(url, {
       status: "down",
       timestamp: initialTimestamp,
-      relayerFeeSolana: null,
-      relayerFeeQubic: null,
+      relayerFeeSolana: 0n,
+      relayerFeeQubic: 0n,
     });
   });
 

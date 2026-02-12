@@ -15,14 +15,8 @@ const OracleHealthSchema = Type.Object({
   url: Type.String({ format: "uri" }),
   status: Type.Union([Type.Literal("ok"), Type.Literal("down")]),
   timestamp: Type.String({ format: "date-time" }),
-  relayerFeeSolana: Type.Union([
-    Type.String({ pattern: "^[0-9]+$" }),
-    Type.Null(),
-  ]),
-  relayerFeeQubic: Type.Union([
-    Type.String({ pattern: "^[0-9]+$" }),
-    Type.Null(),
-  ]),
+  relayerFeeSolana: Type.String({ pattern: "^[0-9]+$" }),
+  relayerFeeQubic: Type.String({ pattern: "^[0-9]+$" }),
 });
 
 const OraclesHealthResponseSchema = Type.Object({
@@ -57,7 +51,11 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     },
     async function handler() {
       return {
-        oracles: oracleService.list(),
+        oracles: oracleService.list().map((entry) => ({
+          ...entry,
+          relayerFeeSolana: entry.relayerFeeSolana.toString(),
+          relayerFeeQubic: entry.relayerFeeQubic.toString(),
+        })),
       };
     }
   );
