@@ -1,15 +1,9 @@
 import { type Static, Type } from "@sinclair/typebox";
 import {
   AmountSchema,
+  BridgeAddressSchema,
   NetworkIdSchema,
 } from "../../common/schemas/common.js";
-import { SolanaAddressSchema } from "../../indexer/schemas/solana-transaction.js";
-import { QubicAddressSchema } from "../../indexer/schemas/qubic-transaction.js";
-
-const BridgeAddressSchema = Type.Union([
-  SolanaAddressSchema,
-  QubicAddressSchema,
-]);
 
 export const EstimationBodySchema = Type.Object({
   networkIn: NetworkIdSchema,
