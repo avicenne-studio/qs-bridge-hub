@@ -13,14 +13,22 @@ import type {
   EstimationOutput,
   ChainCostsEstimation,
 } from "./schemas/estimation.js";
+import { median } from "../common/maths.js";
 import { NETWORK_SOLANA } from "../common/schemas/common.js";
+import {
+  kOracleService,
+  type OracleService,
+} from "../oracle-service.js";
 
 const BPS_FEE = 100n;
 const PROTOCOL_FEE_BPS_OF_BPS = 1000n;
-export const MOCK_RELAYER_FEE_QUBIC = 1;
-export const MOCK_RELAYER_FEE_SOLANA = 1;
 
 export const kFeeEstimation = Symbol("fee-estimation");
+
+export const ESTIMATE_UNAVAILABLE_MESSAGE =
+  "Cannot estimate fees: at least 3 healthy oracles required";
+
+const MIN_HEALTHY_ORACLES = 3;
 
 export type FeeEstimation = {
   estimate(input: EstimationInput): Promise<EstimationOutput>;
@@ -29,19 +37,29 @@ export type FeeEstimation = {
 export function createFeeEstimationService(
   solanaCosts: SolanaCostsEstimation,
   qubicCosts: ChainCostsEstimation,
+  oracleService: Pick<OracleService, "list">,
 ): FeeEstimation {
-
   function computeBridgeFee(amount: bigint) {
     const oracle = (amount * BPS_FEE) / 10_000n;
     const protocol = (oracle * PROTOCOL_FEE_BPS_OF_BPS) / 10_000n;
     return { oracle, protocol, total: oracle + protocol };
   }
 
-  // TODO: Implement real relayer fee
   function getRelayerFee(isOutbound: boolean): bigint {
-    return BigInt(
-      isOutbound ? MOCK_RELAYER_FEE_QUBIC : MOCK_RELAYER_FEE_SOLANA,
+    const healthy = oracleService
+      .list()
+      .filter((o) => o.status === "ok");
+    if (healthy.length < MIN_HEALTHY_ORACLES) {
+      const err = new Error(ESTIMATE_UNAVAILABLE_MESSAGE) as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 503;
+      throw err;
+    }
+    const fees = healthy.map((o) =>
+      isOutbound ? o.relayerFeeQubic : o.relayerFeeSolana,
     );
+    return median(fees);
   }
 
   async function getNetworkFee(
@@ -91,14 +109,20 @@ export default fp(
       fastify.getDecorator<SolanaCostsEstimation>(kSolanaCostsEstimation);
     const qubicCosts =
       fastify.getDecorator<QubicCostsEstimation>(kQubicCostsEstimation);
+    const oracleService =
+      fastify.getDecorator<OracleService>(kOracleService);
 
     fastify.decorate(
       kFeeEstimation,
-      createFeeEstimationService(solanaCosts, qubicCosts),
+      createFeeEstimationService(solanaCosts, qubicCosts, oracleService),
     );
   },
   {
     name: "fee-estimation",
-    dependencies: ["solana-costs-estimation", "qubic-costs-estimation"],
+    dependencies: [
+      "solana-costs-estimation",
+      "qubic-costs-estimation",
+      "oracle-service",
+    ],
   },
 );

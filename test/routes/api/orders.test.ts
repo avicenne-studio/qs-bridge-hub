@@ -4,7 +4,10 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
-import { kFeeEstimation } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
+import {
+  ESTIMATE_UNAVAILABLE_MESSAGE,
+  kFeeEstimation,
+} from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -21,6 +24,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -33,6 +38,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "25",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -105,6 +112,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
@@ -117,6 +126,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "20",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "0",
+    source_payload: "payload",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -129,6 +140,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "30",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -262,6 +275,30 @@ test("POST /api/orders/estimate returns 500 on service error", async (t: TestCon
   t.assert.strictEqual(logMsg, "Unhandled error occurred");
   t.assert.strictEqual(logPayload.err.message, "RPC unreachable");
 
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.message, "Internal Server Error");
+});
+
+test("POST /api/orders/estimate returns 503 when no healthy oracles", async (t: TestContext) => {
+  const err = new Error(ESTIMATE_UNAVAILABLE_MESSAGE) as Error & {
+    statusCode?: number;
+  };
+  err.statusCode = 503;
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() => Promise.reject(err)),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
+
+  const res = await app.inject({
+    url: "/api/orders/estimate",
+    method: "POST",
+    payload: VALID_ESTIMATION_PAYLOAD,
+  });
+
+  t.assert.strictEqual(res.statusCode, 503);
   const body = JSON.parse(res.payload);
   t.assert.strictEqual(body.message, "Internal Server Error");
 });
