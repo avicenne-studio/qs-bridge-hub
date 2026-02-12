@@ -15,6 +15,14 @@ const OracleHealthSchema = Type.Object({
   url: Type.String({ format: "uri" }),
   status: Type.Union([Type.Literal("ok"), Type.Literal("down")]),
   timestamp: Type.String({ format: "date-time" }),
+  relayerFeeSolana: Type.Union([
+    Type.String({ pattern: "^[0-9]+$" }),
+    Type.Null(),
+  ]),
+  relayerFeeQubic: Type.Union([
+    Type.String({ pattern: "^[0-9]+$" }),
+    Type.Null(),
+  ]),
 });
 
 const OraclesHealthResponseSchema = Type.Object({

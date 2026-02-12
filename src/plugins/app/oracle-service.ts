@@ -30,6 +30,8 @@ type OracleStatus = "ok" | "down";
 export type OracleHealthRecord = {
   status: OracleStatus;
   timestamp: string;
+  relayerFeeSolana: string | null;
+  relayerFeeQubic: string | null;
 };
 
 export type OracleHealthEntry = {
@@ -47,6 +49,8 @@ export type OracleService = OracleServiceCore & {
 type OracleHealthPayload = {
   status: OracleStatus;
   timestamp?: string;
+  relayerFeeSolana?: string;
+  relayerFeeQubic?: string;
 };
 
 type PolledOracleHealth = {
@@ -81,6 +85,8 @@ function normalizeHealth(payload: OracleHealthPayload): OracleHealthRecord {
   return {
     status,
     timestamp: payload.timestamp ?? new Date().toISOString(),
+    relayerFeeSolana: payload.relayerFeeSolana ?? null,
+    relayerFeeQubic: payload.relayerFeeQubic ?? null,
   };
 }
 
@@ -92,6 +98,8 @@ function createOracleService(urls: string[]): OracleServiceCore {
     registry.set(url, {
       status: "down",
       timestamp: initialTimestamp,
+      relayerFeeSolana: null,
+      relayerFeeQubic: null,
     });
   });
 
