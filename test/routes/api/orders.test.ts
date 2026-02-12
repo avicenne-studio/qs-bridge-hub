@@ -4,10 +4,7 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
-import {
-  kFeeEstimation,
-  type FeeEstimation,
-} from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
+import { kFeeEstimation } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -194,18 +191,20 @@ const VALID_ESTIMATION_PAYLOAD = {
 };
 
 test("POST /api/orders/estimate returns fee breakdown", async (t: TestContext) => {
-  const app = await build(t);
-  const feeEstimation =
-    app.getDecorator<FeeEstimation>(kFeeEstimation);
-  const { mock } = t.mock.method(feeEstimation, "estimate");
-  mock.mockImplementation(() =>
-    Promise.resolve({
-      bridgeFee: { oracleFee: "10000", protocolFee: "1000", total: "11000" },
-      relayerFee: "1",
-      networkFee: "2190440",
-      userReceives: "988999",
-    }),
-  );
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() =>
+      Promise.resolve({
+        bridgeFee: { oracleFee: "10000", protocolFee: "1000", total: "11000" },
+        relayerFee: "1",
+        networkFee: "2190440",
+        userReceives: "988999",
+      }),
+    ),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
 
   const res = await app.inject({
     url: "/api/orders/estimate",
@@ -219,7 +218,7 @@ test("POST /api/orders/estimate returns fee breakdown", async (t: TestContext) =
   t.assert.strictEqual(body.data.relayerFee, "1");
   t.assert.strictEqual(body.data.networkFee, "2190440");
   t.assert.strictEqual(body.data.userReceives, "988999");
-  t.assert.strictEqual(mock.callCount(), 1);
+  t.assert.strictEqual(fakeFeeEstimation.estimate.mock.callCount(), 1);
 });
 
 test("POST /api/orders/estimate returns 400 for invalid payload", async (t: TestContext) => {
@@ -241,11 +240,13 @@ test("POST /api/orders/estimate returns 400 for invalid payload", async (t: Test
 });
 
 test("POST /api/orders/estimate returns 500 on service error", async (t: TestContext) => {
-  const app = await build(t);
-  const feeEstimation =
-    app.getDecorator<FeeEstimation>(kFeeEstimation);
-  const { mock } = t.mock.method(feeEstimation, "estimate");
-  mock.mockImplementation(() => Promise.reject(new Error("RPC unreachable")));
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() => Promise.reject(new Error("RPC unreachable"))),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
 
   const { mock: logMock } = t.mock.method(app.log, "error");
 

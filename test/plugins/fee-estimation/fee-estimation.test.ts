@@ -1,6 +1,6 @@
 import { describe, it, type TestContext } from "node:test";
 import {
-  createFeeEstimation,
+  createFeeEstimationService,
   MOCK_RELAYER_FEE_QUBIC,
   MOCK_RELAYER_FEE_SOLANA,
 } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
@@ -32,7 +32,7 @@ const INBOUND_INPUT: EstimationInput = {
 
 describe("fee-estimation", () => {
   it("computes outbound fees (Solana -> Qubic)", async (t: TestContext) => {
-    const service = createFeeEstimation(
+    const service = createFeeEstimationService(
       makeSolanaCosts(2_190_440),
       makeQubicCosts(),
     );
@@ -49,7 +49,7 @@ describe("fee-estimation", () => {
   });
 
   it("computes inbound fees (Qubic -> Solana)", async (t: TestContext) => {
-    const service = createFeeEstimation(
+    const service = createFeeEstimationService(
       makeSolanaCosts(),
       makeQubicCosts(1),
     );
@@ -64,7 +64,7 @@ describe("fee-estimation", () => {
   });
 
   it("rejects when networkIn === networkOut", async (t: TestContext) => {
-    const service = createFeeEstimation(
+    const service = createFeeEstimationService(
       makeSolanaCosts(),
       makeQubicCosts(),
     );

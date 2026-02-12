@@ -1,6 +1,12 @@
 import { Static, Type } from "@sinclair/typebox";
 import { StringSchema } from "../../common/schemas/common.js";
 
+export const SolanaAddressSchema = Type.String({
+  minLength: 32,
+  maxLength: 44,
+  pattern: '^[1-9A-HJ-NP-Za-km-z]+$',
+})
+
 export const SolanaInstructionSchema = Type.Object({
   programId: StringSchema,
   accounts: Type.Array(StringSchema),

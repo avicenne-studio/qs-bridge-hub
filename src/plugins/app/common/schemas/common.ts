@@ -17,23 +17,6 @@ export const AmountSchema = Type.String({
   pattern: '^[0-9]+$'
 })
 
-export const SolanaAddressSchema = Type.String({
-  minLength: 32,
-  maxLength: 44,
-  pattern: '^[1-9A-HJ-NP-Za-km-z]+$',
-})
-
-export const QubicAddressSchema = Type.String({
-  minLength: 60,
-  maxLength: 60,
-  pattern: '^[A-Z]{60}$',
-})
-
-export const BridgeAddressSchema = Type.Union([
-  SolanaAddressSchema,
-  QubicAddressSchema,
-])
-
 export const NETWORK_QUBIC = 1
 export const NETWORK_SOLANA = 2
 

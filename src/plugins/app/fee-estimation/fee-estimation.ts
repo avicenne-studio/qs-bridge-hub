@@ -26,7 +26,7 @@ export type FeeEstimation = {
   estimate(input: EstimationInput): Promise<EstimationOutput>;
 };
 
-export function createFeeEstimation(
+export function createFeeEstimationService(
   solanaCosts: SolanaCostsEstimation,
   qubicCosts: ChainCostsEstimation,
 ): FeeEstimation {
@@ -85,6 +85,8 @@ export function createFeeEstimation(
 
 export default fp(
   async function feeEstimationPlugin(fastify: FastifyInstance) {
+    if (fastify.hasDecorator(kFeeEstimation)) return;
+
     const solanaCosts =
       fastify.getDecorator<SolanaCostsEstimation>(kSolanaCostsEstimation);
     const qubicCosts =
@@ -92,7 +94,7 @@ export default fp(
 
     fastify.decorate(
       kFeeEstimation,
-      createFeeEstimation(solanaCosts, qubicCosts),
+      createFeeEstimationService(solanaCosts, qubicCosts),
     );
   },
   {

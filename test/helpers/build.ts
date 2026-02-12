@@ -62,6 +62,7 @@ const DEFAULT_TEST_CONFIG: AppConfig = {
   SOLANA_WS_RECONNECT_BASE_MS: 50,
   SOLANA_WS_RECONNECT_MAX_MS: 200,
   SOLANA_WS_FALLBACK_RETRY_MS: 200,
+TOKEN_MINT: "So1111111111111111111111111111111111111111",
 };
 
 function resolveBuildOptions(options?: BuildOptions | BuildHooks): BuildOptions {
@@ -122,9 +123,7 @@ export async function build(t?: TestContext, options?: BuildOptions) {
 
   await app.ready();
 
-  // This is after start, so we can't decorate the instance using `.decorate`
-
-  // If we pass the test contest, it will close the app after we are done
+  // If we pass the test context, it will close the app after we are done
   if (t) {
     t.after(() => app.close());
   }

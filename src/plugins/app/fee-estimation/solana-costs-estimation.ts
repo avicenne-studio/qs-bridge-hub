@@ -1,6 +1,5 @@
 import fp from "fastify-plugin";
 import { type FastifyInstance } from "fastify";
-import { type Address } from "@solana/kit";
 import { type AppConfig, kConfig } from "../../infra/env.js";
 import {
   type UndiciClientService,
@@ -8,23 +7,11 @@ import {
   kUndiciClient,
 } from "../../infra/undici-client.js";
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../../../clients/js/programs/qsBridge.js";
-
-const TOKEN_MINT =
-  "4bbjhGLSYwku6Y44dqwcroRfj2vHCdiHJ9SUmndc4FVg" as Address;
-const TOKEN_PROGRAM_ADDRESS =
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
-const ASSOCIATED_TOKEN_PROGRAM_ADDRESS =
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
-const SYSTEM_PROGRAM_ADDRESS =
-  "11111111111111111111111111111111" as Address;
-
-const DEFAULT_ACCOUNT_KEYS: string[] = [
-  QS_BRIDGE_PROGRAM_ADDRESS,
-  TOKEN_MINT,
+import {
   TOKEN_PROGRAM_ADDRESS,
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
-  SYSTEM_PROGRAM_ADDRESS,
-];
+} from "@solana-program/token";
+import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 
 export const BASE_FEE_LAMPORTS = 5_000;
 export const OUTBOUND_ORDER_RENT_LAMPORTS = 2_185_440;
@@ -80,12 +67,20 @@ export default fp(
     const undiciService =
       fastify.getDecorator<UndiciClientService>(kUndiciClient);
 
+    const accountKeys = [
+      QS_BRIDGE_PROGRAM_ADDRESS,
+      config.TOKEN_MINT,
+      TOKEN_PROGRAM_ADDRESS,
+      ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+      SYSTEM_PROGRAM_ADDRESS,
+    ];
+
     fastify.decorate(
       kSolanaCostsEstimation,
       createSolanaCostsEstimation(
         undiciService.create(),
         config.HELIUS_RPC_URL,
-        DEFAULT_ACCOUNT_KEYS,
+        accountKeys,
       ),
     );
   },

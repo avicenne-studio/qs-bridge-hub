@@ -1,6 +1,12 @@
 import { Static, Type } from "@sinclair/typebox";
 import { StringSchema } from "../../common/schemas/common.js";
 
+export const QubicAddressSchema = Type.String({
+  minLength: 60,
+  maxLength: 60,
+  pattern: '^[A-Z]{60}$',
+})
+
 export const QubicTransactionSchema = Type.Object({
   sender: StringSchema,
   recipient: StringSchema,
