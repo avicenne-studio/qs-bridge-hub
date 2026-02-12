@@ -87,7 +87,14 @@ function createHealthServer(opts: {
 
     onHealthyRequest?.();
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", timestamp: now?.() }));
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        timestamp: now?.(),
+        relayerFeeSolana: "1000",
+        relayerFeeQubic: "500",
+      })
+    );
   });
 }
 
@@ -121,7 +128,13 @@ function createOrdersServer(opts: {
       }
 
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          relayerFeeSolana: "1000",
+          relayerFeeQubic: "500",
+        })
+      );
       return;
     }
 
@@ -173,7 +186,12 @@ function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
   const oracleService = app.getDecorator<OracleService>(kOracleService);
   const timestamp = new Date().toISOString();
   for (const url of urls) {
-    oracleService.update(url, { status: "ok", timestamp });
+    oracleService.update(url, {
+      status: "ok",
+      timestamp,
+      relayerFeeSolana: 1000n,
+      relayerFeeQubic: 500n,
+    });
   }
 }
 
@@ -249,7 +267,12 @@ describe("oracle service", () => {
 
       app
         .getDecorator<OracleService>(kOracleService)
-        .update(first.url, { status: "ok", timestamp });
+        .update(first.url, {
+          status: "ok",
+          timestamp,
+          relayerFeeSolana: 1000n,
+          relayerFeeQubic: 500n,
+        });
 
       const updated = getOracleEntry(app, first.url);
       t.assert.strictEqual(updated?.timestamp, timestamp);
@@ -270,7 +293,7 @@ describe("oracle service", () => {
       t.assert.strictEqual(grouped[1][0].id, makeId(2));
     });
 
-  test("polls remote health endpoints", async (t: TestContext) => {
+    test("polls remote health endpoints", async (t: TestContext) => {
     const [healthyUrl, failingUrl, slowUrl] = ORACLE_URLS;
 
     let healthyRequests = 0;
@@ -329,6 +352,14 @@ describe("oracle service", () => {
       t.assert.strictEqual(
         snapshot.find((e) => e.url === slowUrl)?.status,
         "down"
+      );
+      t.assert.strictEqual(
+        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeSolana,
+        1000n
+      );
+      t.assert.strictEqual(
+        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeQubic,
+        500n
       );
 
     await waitFor(async () => {
@@ -975,6 +1006,38 @@ describe("oracle service", () => {
 
       const fetched = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(fetched?.status, "pending");
+    });
+
+    test("defaults relayer fees to zero on invalid payloads", async (t: TestContext) => {
+      const invalidServer = createTrackedServer((req, res) => {
+        if (req.url !== "/api/health") {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            status: "ok",
+            relayerFeeSolana: "bad",
+            relayerFeeQubic: "500",
+          })
+        );
+      });
+
+      await withServers(t, [invalidServer], [6101]);
+      const app = await build(t, {
+        useMocks: false,
+        config: { ORACLE_URLS: "http://127.0.0.1:6101", ORACLE_COUNT: 1 },
+      });
+
+      await waitFor(() => {
+        const entry = getOracleEntry(app, "http://127.0.0.1:6101");
+        return entry?.status === "ok";
+      });
+
+      const entry = getOracleEntry(app, "http://127.0.0.1:6101");
+      t.assert.strictEqual(entry?.relayerFeeSolana, 0n);
+      t.assert.strictEqual(entry?.relayerFeeQubic, 500n);
     });
   });
 });

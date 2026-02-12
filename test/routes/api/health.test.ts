@@ -20,7 +20,13 @@ test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
 
 test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => {
   const app = await build(t);
-  const expected = app.getDecorator<OracleService>(kOracleService).list();
+  const expected = app.getDecorator<OracleService>(kOracleService)
+    .list()
+    .map((entry) => ({
+      ...entry,
+      relayerFeeSolana: entry.relayerFeeSolana.toString(),
+      relayerFeeQubic: entry.relayerFeeQubic.toString(),
+    }));
 
   const res = await app.inject({
     url: "/api/health/oracles",
