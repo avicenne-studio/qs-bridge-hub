@@ -5,9 +5,9 @@ import {
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
 import {
-  kCostsEstimation,
-  type CostsEstimationService,
-} from "../../../src/plugins/app/costs-estimation.js";
+  kFeeEstimation,
+  type FeeEstimationService,
+} from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -185,39 +185,55 @@ test("GET /api/orders handles repository errors", async (t: TestContext) => {
   t.assert.strictEqual(body.message, "Internal Server Error");
 });
 
-test("POST /api/orders/simulation returns estimated cost", async (t: TestContext) => {
+const VALID_SIMULATION_PAYLOAD = {
+  networkIn: 2,
+  networkOut: 1,
+  fromAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
+  toAddress: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  amount: "1000000",
+};
+
+test("POST /api/orders/simulation returns fee breakdown", async (t: TestContext) => {
   const app = await build(t);
-  const costsEstimation =
-    app.getDecorator<CostsEstimationService>(kCostsEstimation);
-  const { mock } = t.mock.method(costsEstimation, "estimateInboundCost");
-  mock.mockImplementation(() => Promise.resolve(3_199_640));
+  const feeEstimation =
+    app.getDecorator<FeeEstimationService>(kFeeEstimation);
+  const { mock } = t.mock.method(feeEstimation, "estimate");
+  mock.mockImplementation(() =>
+    Promise.resolve({
+      bridgeFee: { oracleFee: "10000", protocolFee: "1000", total: "11000" },
+      relayerFee: "1",
+      networkFee: "2190440",
+      userReceives: "988999",
+    }),
+  );
 
   const res = await app.inject({
     url: "/api/orders/simulation",
     method: "POST",
-    payload: {
-      recipientAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
-    },
+    payload: VALID_SIMULATION_PAYLOAD,
   });
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  t.assert.strictEqual(body.data.estimatedCostLamports, 3_199_640);
+  t.assert.strictEqual(body.data.bridgeFee.total, "11000");
+  t.assert.strictEqual(body.data.relayerFee, "1");
+  t.assert.strictEqual(body.data.networkFee, "2190440");
+  t.assert.strictEqual(body.data.userReceives, "988999");
   t.assert.strictEqual(mock.callCount(), 1);
-  t.assert.strictEqual(
-    mock.calls[0].arguments[0],
-    "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
-  );
 });
 
-test("POST /api/orders/simulation returns 400 for invalid address", async (t: TestContext) => {
+test("POST /api/orders/simulation returns 400 for invalid payload", async (t: TestContext) => {
   const app = await build(t);
 
   const res = await app.inject({
     url: "/api/orders/simulation",
     method: "POST",
     payload: {
-      recipientAddress: "not-a-valid-base58!",
+      networkIn: 2,
+      networkOut: 1,
+      fromAddress: "not-a-valid-base58!",
+      toAddress: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      amount: "1000000",
     },
   });
 
@@ -226,9 +242,9 @@ test("POST /api/orders/simulation returns 400 for invalid address", async (t: Te
 
 test("POST /api/orders/simulation returns 500 on service error", async (t: TestContext) => {
   const app = await build(t);
-  const costsEstimation =
-    app.getDecorator<CostsEstimationService>(kCostsEstimation);
-  const { mock } = t.mock.method(costsEstimation, "estimateInboundCost");
+  const feeEstimation =
+    app.getDecorator<FeeEstimationService>(kFeeEstimation);
+  const { mock } = t.mock.method(feeEstimation, "estimate");
   mock.mockImplementation(() => Promise.reject(new Error("RPC unreachable")));
 
   const { mock: logMock } = t.mock.method(app.log, "error");
@@ -236,15 +252,13 @@ test("POST /api/orders/simulation returns 500 on service error", async (t: TestC
   const res = await app.inject({
     url: "/api/orders/simulation",
     method: "POST",
-    payload: {
-      recipientAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
-    },
+    payload: VALID_SIMULATION_PAYLOAD,
   });
 
   t.assert.strictEqual(res.statusCode, 500);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logPayload, logMsg] = logMock.calls[0].arguments as any;
-  t.assert.strictEqual(logMsg, "Failed to estimate inbound cost");
+  t.assert.strictEqual(logMsg, "Failed to estimate bridge costs");
   t.assert.strictEqual(logPayload.err.message, "RPC unreachable");
 
   const body = JSON.parse(res.payload);
