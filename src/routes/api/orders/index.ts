@@ -20,7 +20,7 @@ import { EventsRepository, kEventsRepository } from "../../../plugins/app/events
 import { computeRequiredSignatures } from "../../../plugins/app/oracle-service.js";
 import {
   kFeeEstimation,
-  type FeeEstimationService,
+  type FeeEstimation,
 } from "../../../plugins/app/fee-estimation/fee-estimation.js";
 import {
   EstimationBodySchema,
@@ -97,7 +97,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const eventsRepository =
     fastify.getDecorator<EventsRepository>(kEventsRepository);
   const feeEstimation =
-    fastify.getDecorator<FeeEstimationService>(kFeeEstimation);
+    fastify.getDecorator<FeeEstimation>(kFeeEstimation);
   fastify.get(
     "/",
     {
@@ -228,15 +228,8 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler(request) {
-      try {
-        const result = await feeEstimation.estimate(request.body);
-        return { data: result };
-      } catch (error) {
-        fastify.log.error({ err: error }, "Failed to estimate bridge costs");
-        throw fastify.httpErrors.internalServerError(
-          "Failed to estimate bridge costs",
-        );
-      }
+      const result = await feeEstimation.estimate(request.body);
+      return { data: result };
     }
   );
 };

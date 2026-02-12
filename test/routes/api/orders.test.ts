@@ -6,7 +6,7 @@ import {
 } from "../../../src/plugins/app/indexer/orders.repository.js";
 import {
   kFeeEstimation,
-  type FeeEstimationService,
+  type FeeEstimation,
 } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
 const makeId = (value: number) =>
@@ -196,7 +196,7 @@ const VALID_ESTIMATION_PAYLOAD = {
 test("POST /api/orders/estimate returns fee breakdown", async (t: TestContext) => {
   const app = await build(t);
   const feeEstimation =
-    app.getDecorator<FeeEstimationService>(kFeeEstimation);
+    app.getDecorator<FeeEstimation>(kFeeEstimation);
   const { mock } = t.mock.method(feeEstimation, "estimate");
   mock.mockImplementation(() =>
     Promise.resolve({
@@ -243,7 +243,7 @@ test("POST /api/orders/estimate returns 400 for invalid payload", async (t: Test
 test("POST /api/orders/estimate returns 500 on service error", async (t: TestContext) => {
   const app = await build(t);
   const feeEstimation =
-    app.getDecorator<FeeEstimationService>(kFeeEstimation);
+    app.getDecorator<FeeEstimation>(kFeeEstimation);
   const { mock } = t.mock.method(feeEstimation, "estimate");
   mock.mockImplementation(() => Promise.reject(new Error("RPC unreachable")));
 
@@ -258,7 +258,7 @@ test("POST /api/orders/estimate returns 500 on service error", async (t: TestCon
   t.assert.strictEqual(res.statusCode, 500);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [logPayload, logMsg] = logMock.calls[0].arguments as any;
-  t.assert.strictEqual(logMsg, "Failed to estimate bridge costs");
+  t.assert.strictEqual(logMsg, "Unhandled error occurred");
   t.assert.strictEqual(logPayload.err.message, "RPC unreachable");
 
   const body = JSON.parse(res.payload);

@@ -18,56 +18,60 @@ const ASSOCIATED_TOKEN_PROGRAM_ADDRESS =
 const SYSTEM_PROGRAM_ADDRESS =
   "11111111111111111111111111111111" as Address;
 
+const DEFAULT_ACCOUNT_KEYS: string[] = [
+  QS_BRIDGE_PROGRAM_ADDRESS,
+  TOKEN_MINT,
+  TOKEN_PROGRAM_ADDRESS,
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  SYSTEM_PROGRAM_ADDRESS,
+];
+
 export const BASE_FEE_LAMPORTS = 5_000;
 export const OUTBOUND_ORDER_RENT_LAMPORTS = 2_185_440;
 export const OUTBOUND_CU = 30_000;
 
 export const kSolanaCostsEstimation = Symbol("solana-costs-estimation");
 
+export type SolanaCostsEstimation = {
+  estimateUserNetworkFee(): Promise<number>;
+};
+
 interface RpcPriorityFeeResponse {
   result: { priorityFeeEstimate: number };
 }
 
-export class SolanaCostsEstimationService {
-  private readonly httpClient: UndiciClient;
-  private readonly origin: string;
-  private readonly path: string;
+export function createSolanaCostsEstimation(
+  httpClient: UndiciClient,
+  rpcUrl: string,
+  accountKeys: string[],
+): SolanaCostsEstimation {
+  const url = new URL(rpcUrl);
+  const origin = url.origin;
+  const path = url.pathname + url.search;
 
-  constructor(httpClient: UndiciClient, rpcUrl: string) {
-    const url = new URL(rpcUrl);
-    this.httpClient = httpClient;
-    this.origin = url.origin;
-    this.path = url.pathname + url.search;
-  }
-
-  async estimateUserNetworkFee(): Promise<number> {
-    const priorityFee = await this.getPriorityFeeForCu(OUTBOUND_CU);
-    return BASE_FEE_LAMPORTS + priorityFee + OUTBOUND_ORDER_RENT_LAMPORTS;
-  }
-
-  private async getPriorityFeeForCu(cu: number): Promise<number> {
-    const accountKeys = [
-      QS_BRIDGE_PROGRAM_ADDRESS,
-      TOKEN_MINT,
-      TOKEN_PROGRAM_ADDRESS,
-      ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
-      SYSTEM_PROGRAM_ADDRESS,
-    ];
-    const response = await this.rpc<RpcPriorityFeeResponse>(
-      "getPriorityFeeEstimate",
-      [{ accountKeys, options: { recommended: true } }],
-    );
-    return Math.ceil((response.result.priorityFeeEstimate * cu) / 1_000_000);
-  }
-
-  private async rpc<T>(method: string, params: unknown[]): Promise<T> {
-    return this.httpClient.postJson<T>(this.origin, this.path, {
+  async function rpc<T>(method: string, params: unknown[]): Promise<T> {
+    return httpClient.postJson<T>(origin, path, {
       jsonrpc: "2.0",
       id: 1,
       method,
       params,
     });
   }
+
+  async function getPriorityFeeForCu(cu: number): Promise<number> {
+    const response = await rpc<RpcPriorityFeeResponse>(
+      "getPriorityFeeEstimate",
+      [{ accountKeys, options: { recommended: true } }],
+    );
+    return Math.ceil((response.result.priorityFeeEstimate * cu) / 1_000_000);
+  }
+
+  return {
+    async estimateUserNetworkFee() {
+      const priorityFee = await getPriorityFeeForCu(OUTBOUND_CU);
+      return BASE_FEE_LAMPORTS + priorityFee + OUTBOUND_ORDER_RENT_LAMPORTS;
+    },
+  };
 }
 
 export default fp(
@@ -76,12 +80,14 @@ export default fp(
     const undiciService =
       fastify.getDecorator<UndiciClientService>(kUndiciClient);
 
-    const service = new SolanaCostsEstimationService(
-      undiciService.create(),
-      config.HELIUS_RPC_URL,
+    fastify.decorate(
+      kSolanaCostsEstimation,
+      createSolanaCostsEstimation(
+        undiciService.create(),
+        config.HELIUS_RPC_URL,
+        DEFAULT_ACCOUNT_KEYS,
+      ),
     );
-
-    fastify.decorate(kSolanaCostsEstimation, service);
   },
   {
     name: "solana-costs-estimation",

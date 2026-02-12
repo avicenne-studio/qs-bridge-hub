@@ -1,25 +1,12 @@
 import { describe, it, type TestContext } from "node:test";
-import fastify from "fastify";
-import qubicCostsEstimationPlugin, {
-  kQubicCostsEstimation,
-  QubicCostsEstimationService,
+import {
+  createQubicCostsEstimation,
   MOCK_USER_NETWORK_FEE_QUBIC,
 } from "../../../src/plugins/app/fee-estimation/qubic-costs-estimation.js";
 
-
-async function buildApp(t: TestContext) {
-  const app = fastify({ logger: false });
-  app.register(qubicCostsEstimationPlugin);
-  await app.ready();
-  t.after(() => app.close());
-  return app;
-}
-
-describe("qubic-costs-estimation plugin", () => {
+describe("qubic-costs-estimation", () => {
   it("returns mock network fee", async (t: TestContext) => {
-    const app = await buildApp(t);
-    const service =
-      app.getDecorator<QubicCostsEstimationService>(kQubicCostsEstimation);
+    const service = createQubicCostsEstimation();
 
     const fee = await service.estimateUserNetworkFee({
       networkIn: 1,

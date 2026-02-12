@@ -1,26 +1,17 @@
 import { describe, it, type TestContext } from "node:test";
 import {
-  FeeEstimationService,
+  createFeeEstimation,
   MOCK_RELAYER_FEE_QUBIC,
   MOCK_RELAYER_FEE_SOLANA,
 } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
-import type { SolanaCostsEstimationService } from "../../../src/plugins/app/fee-estimation/solana-costs-estimation.js";
-import type { QubicCostsEstimationService } from "../../../src/plugins/app/fee-estimation/qubic-costs-estimation.js";
 import type { EstimationInput } from "../../../src/plugins/app/fee-estimation/schemas/estimation.js";
 
-
-function makeSolanaCosts(
-  networkFee: number = 2_190_440,
-): SolanaCostsEstimationService {
-  return {
-    estimateUserNetworkFee: async () => networkFee,
-  } as unknown as SolanaCostsEstimationService;
+function makeSolanaCosts(networkFee: number = 2_190_440) {
+  return { estimateUserNetworkFee: async () => networkFee };
 }
 
-function makeQubicCosts(networkFee: number = 1): QubicCostsEstimationService {
-  return {
-    estimateUserNetworkFee: async () => networkFee,
-  } as unknown as QubicCostsEstimationService;
+function makeQubicCosts(networkFee: number = 1) {
+  return { estimateUserNetworkFee: async () => networkFee };
 }
 
 const OUTBOUND_INPUT: EstimationInput = {
@@ -39,9 +30,9 @@ const INBOUND_INPUT: EstimationInput = {
   amount: "1000000",
 };
 
-describe("fee-estimation service", () => {
+describe("fee-estimation", () => {
   it("computes outbound fees (Solana -> Qubic)", async (t: TestContext) => {
-    const service = new FeeEstimationService(
+    const service = createFeeEstimation(
       makeSolanaCosts(2_190_440),
       makeQubicCosts(),
     );
@@ -58,7 +49,7 @@ describe("fee-estimation service", () => {
   });
 
   it("computes inbound fees (Qubic -> Solana)", async (t: TestContext) => {
-    const service = new FeeEstimationService(
+    const service = createFeeEstimation(
       makeSolanaCosts(),
       makeQubicCosts(1),
     );
@@ -73,7 +64,7 @@ describe("fee-estimation service", () => {
   });
 
   it("rejects when networkIn === networkOut", async (t: TestContext) => {
-    const service = new FeeEstimationService(
+    const service = createFeeEstimation(
       makeSolanaCosts(),
       makeQubicCosts(),
     );
