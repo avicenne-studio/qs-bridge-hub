@@ -1,6 +1,8 @@
 import { test, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import { kKnex, type KnexAccessor } from "../../../src/plugins/infra/knex.js";
 import {
+  ORDERS_TABLE_NAME,
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
@@ -49,8 +51,9 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   await seedOrders(app);
 
   const res = await app.inject({
-    url: "/api/orders?page=1&limit=1&order=asc&dest=qubic",
     method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "1", order: "asc", dest: "qubic" },
   });
 
   t.assert.strictEqual(res.statusCode, 200);
@@ -68,13 +71,137 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].oracle_accept_to_relay, false);
 });
 
+test("GET /api/orders filters by status (multiple)", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", status: ["in-progress", "finalized"] },
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.pagination.total, 2);
+});
+
+test("GET /api/orders filters by from", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const resFrom = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", from: "A" },
+  });
+  t.assert.strictEqual(resFrom.statusCode, 200);
+  const bodyFrom = JSON.parse(resFrom.payload);
+  t.assert.strictEqual(bodyFrom.data.length, 1);
+  t.assert.strictEqual(bodyFrom.data[0].from, "A");
+  t.assert.strictEqual(bodyFrom.data[0].id, makeId(401));
+
+  const resTo = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", to: "D" },
+  });
+  t.assert.strictEqual(resTo.statusCode, 200);
+  const bodyTo = JSON.parse(resTo.payload);
+  t.assert.strictEqual(bodyTo.data.length, 1);
+  t.assert.strictEqual(bodyTo.data[0].to, "D");
+  t.assert.strictEqual(bodyTo.data[0].id, makeId(402));
+});
+
+test("GET /api/orders filters by amount_min and amount_max", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", amount_min: "15", amount_max: "30" },
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].amount, "25");
+  t.assert.strictEqual(body.data[0].id, makeId(402));
+});
+
+test("GET /api/orders filters by id", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const orderId = makeId(401);
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", id: orderId },
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].id, orderId);
+  t.assert.strictEqual(body.data[0].from, "A");
+});
+
+test("GET /api/orders filters by created_after and created_before", async (t: TestContext) => {
+  const app = await build(t);
+  const knex = app.getDecorator<KnexAccessor>(kKnex).get();
+
+  const dateOld = "1970-06-01T00:00:00.000Z";
+  const dateMid = "2000-06-01T00:00:00.000Z";
+  const dateNew = "2099-06-01T00:00:00.000Z";
+  const dateBetweenOldAndMid = "1980-01-01T00:00:00.000Z";
+  const dateAfterNew = "2100-01-01T00:00:00.000Z";
+
+  const row = {
+    source: "solana",
+    dest: "qubic",
+    from: "X",
+    to: "Y",
+    amount: "1",
+    relayerFee: "1",
+    origin_trx_hash: "tx",
+    source_nonce: "n",
+    source_payload: "{}",
+    oracle_accept_to_relay: false,
+    status: "in-progress" as const,
+  };
+  await knex(ORDERS_TABLE_NAME).insert([
+    { ...row, id: makeId(501), created_at: dateOld },
+    { ...row, id: makeId(502), created_at: dateMid },
+    { ...row, id: makeId(503), created_at: dateNew },
+  ]);
+
+  async function total(query: Record<string, string>) {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/orders",
+      query: { page: "1", limit: "10", ...query },
+    });
+    t.assert.strictEqual(res.statusCode, 200);
+    return JSON.parse(res.payload).pagination.total;
+  }
+
+  t.assert.strictEqual(await total({ created_after: dateOld, created_before: dateNew }), 3); 
+  t.assert.strictEqual(await total({ created_after: dateOld, created_before: dateBetweenOldAndMid }), 1); 
+  t.assert.strictEqual(await total({ created_after: dateMid, created_before: dateNew }), 2); 
+  t.assert.strictEqual(await total({ created_after: dateAfterNew }), 0);
+});
+
 test("GET /api/orders/trx-hash returns order by transaction hash", async (t: TestContext) => {
   const app = await build(t);
   await seedOrders(app);
 
   const res = await app.inject({
-    url: "/api/orders/trx-hash?hash=trx-hash",
     method: "GET",
+    url: "/api/orders/trx-hash",
+    query: { hash: "trx-hash" },
   });
 
   t.assert.strictEqual(res.statusCode, 200);
@@ -88,8 +215,9 @@ test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: Tes
   await seedOrders(app);
 
   const res = await app.inject({
-    url: "/api/orders/trx-hash?hash=missing",
     method: "GET",
+    url: "/api/orders/trx-hash",
+    query: { hash: "missing" },
   });
 
   t.assert.strictEqual(res.statusCode, 404);
@@ -125,8 +253,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "20",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
-    source_nonce: "0",
-    source_payload: "payload",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -180,8 +308,8 @@ test("GET /api/orders handles repository errors", async (t: TestContext) => {
   const { mock: logMock } = t.mock.method(app.log, "error");
 
   const res = await app.inject({
-    url: "/api/orders",
     method: "GET",
+    url: "/api/orders",
   });
 
   t.assert.strictEqual(res.statusCode, 500);
