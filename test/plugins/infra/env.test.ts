@@ -18,6 +18,10 @@ test("rejects invalid ORACLE_URLS entries", async (t: TestContext) => {
       HUB_KEYS_FILE: "./test/fixtures/hub-keys.json",
       SOLANA_WS_URL: "ws://localhost:8900",
       SOLANA_LISTENER_ENABLED: false,
+      QUBIC_RPC_URL: "http://localhost:3015/events",
+      QUBIC_POLLER_ENABLED: false,
+      QUBIC_POLLER_INTERVAL_MS: 1000,
+      QUBIC_POLLER_TIMEOUT_MS: 1000,
     },
   });
 

@@ -108,8 +108,8 @@ export type StoredEvent = {
   id: number;
   signature: string;
   slot: number | null;
-  chain: "solana";
-  type: "outbound" | "override-outbound";
+  chain: "solana" | "qubic";
+  type: "outbound" | "override-outbound" | "lock" | "override-lock";
   nonce: string;
   payload: Record<string, unknown>;
   createdAt: string;
