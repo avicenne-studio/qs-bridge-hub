@@ -60,6 +60,10 @@ export default fp(
           table.string("failure_reason_public").nullable();
           table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
+          table
+            .timestamp("created_at", { useTz: false })
+            .notNullable()
+            .defaultTo(db.fn.now());
         });
       }
 

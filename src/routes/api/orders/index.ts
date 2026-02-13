@@ -5,8 +5,14 @@ import {
 import {
   OracleChain,
   OracleOrderSchema,
+  OracleOrderStatus,
 } from "../../../plugins/app/indexer/schemas/order.js";
-import { IdSchema, StringSchema } from "../../../plugins/app/common/schemas/common.js";
+import {
+  AmountSchema,
+  DateTimeSchema,
+  IdSchema,
+  StringSchema,
+} from "../../../plugins/app/common/schemas/common.js";
 import {
   kOrdersRepository,
   type OrdersRepository,
@@ -27,6 +33,14 @@ const OrdersQueryParamsSchema = Type.Object({
   order: OrderDirectionSchema,
   source: Type.Optional(OracleChain),
   dest: Type.Optional(OracleChain),
+  status: Type.Optional(Type.Array(OracleOrderStatus)),
+  from: Type.Optional(StringSchema),
+  to: Type.Optional(StringSchema),
+  amount_min: Type.Optional(AmountSchema),
+  amount_max: Type.Optional(AmountSchema),
+  created_after: Type.Optional(DateTimeSchema),
+  created_before: Type.Optional(DateTimeSchema),
+  id: Type.Optional(IdSchema),
 });
 
 const StoredOrderSchema = Type.Intersect([
@@ -95,7 +109,21 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler(request) {
-      const { page, limit, order, source, dest } = request.query;
+      const {
+        page,
+        limit,
+        order,
+        source,
+        dest,
+        status,
+        from,
+        to,
+        amount_min,
+        amount_max,
+        created_after,
+        created_before,
+        id,
+      } = request.query;
 
       try {
         const result = await ordersRepository.paginate({
@@ -104,6 +132,14 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
           order,
           source,
           dest,
+          status,
+          from,
+          to,
+          amount_min,
+          amount_max,
+          created_after,
+          created_before,
+          id,
         });
 
         return {
