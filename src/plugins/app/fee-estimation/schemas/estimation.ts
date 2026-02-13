@@ -41,5 +41,5 @@ export const EstimationResponseSchema = Type.Object({
 });
 
 export interface ChainCostsEstimation {
-  estimateUserNetworkFee(input?: EstimationInput): Promise<number>;
+  estimateUserNetworkFee(input?: EstimationInput): Promise<bigint>;
 }

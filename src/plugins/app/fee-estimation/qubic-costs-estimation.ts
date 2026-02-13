@@ -12,7 +12,7 @@ export type QubicCostsEstimation = ChainCostsEstimation;
 export function createQubicCostsEstimation(): QubicCostsEstimation {
   return {
     async estimateUserNetworkFee() {
-      return MOCK_USER_NETWORK_FEE_QUBIC;
+      return BigInt(MOCK_USER_NETWORK_FEE_QUBIC);
     },
   };
 }

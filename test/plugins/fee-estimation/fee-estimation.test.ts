@@ -1,21 +1,21 @@
 import { describe, it, type TestContext } from "node:test";
-import {
-  createFeeEstimationService,
-  ESTIMATE_UNAVAILABLE_MESSAGE,
-} from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
+import { createFeeEstimationService } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 import type { EstimationInput } from "../../../src/plugins/app/fee-estimation/schemas/estimation.js";
-import type { OracleHealthEntry } from "../../../src/plugins/app/oracle-service.js";
+import type {
+  OracleHealthEntry,
+  OracleService,
+} from "../../../src/plugins/app/oracle-service.js";
 
 function makeSolanaCosts(networkFee: number = 2_190_440) {
-  return { estimateUserNetworkFee: async () => networkFee };
+  return { estimateUserNetworkFee: async () => BigInt(networkFee) };
 }
 
 function makeQubicCosts(networkFee: number = 1) {
-  return { estimateUserNetworkFee: async () => networkFee };
+  return { estimateUserNetworkFee: async () => BigInt(networkFee) };
 }
 
-function makeOracleService(entries: OracleHealthEntry[]) {
-  return { list: () => entries };
+function makeOracleService(entries: OracleHealthEntry[]): OracleService {
+  return { list: () => entries } as OracleService;
 }
 
 const OUTBOUND_INPUT: EstimationInput = {
@@ -34,28 +34,30 @@ const INBOUND_INPUT: EstimationInput = {
   amount: "1000000",
 };
 
-const healthyOracleQubic5 = (url: string): OracleHealthEntry => ({
-  url,
-  status: "ok",
-  timestamp: new Date().toISOString(),
-  relayerFeeSolana: 10n,
-  relayerFeeQubic: 5n,
-});
-
-const healthyOracleSolana20 = (url: string): OracleHealthEntry => ({
-  url,
-  status: "ok",
-  timestamp: new Date().toISOString(),
-  relayerFeeSolana: 20n,
-  relayerFeeQubic: 1n,
-});
+function healthyOracle(
+  url: string,
+  opts: {
+    relayerFeeSolana?: bigint;
+    relayerFeeQubic?: bigint;
+  } = {},
+): OracleHealthEntry {
+  return {
+    url,
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    relayerFeeSolana: 20n,
+    relayerFeeQubic: 1n,
+    ...opts,
+  };
+}
 
 describe("fee-estimation", () => {
   it("computes outbound fees (Solana -> Qubic) using median relayer fee", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracleQubic5("http://a"),
-      { ...healthyOracleSolana20("http://b"), relayerFeeQubic: 7n },
-      { ...healthyOracleQubic5("http://c"), relayerFeeQubic: 3n },
+      healthyOracle("http://a", { relayerFeeQubic: 5n }),
+      healthyOracle("http://b", { relayerFeeQubic: 7n }),
+      healthyOracle("http://c", { relayerFeeQubic: 3n }),
+      healthyOracle("http://d", { relayerFeeQubic: 5n }),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(2_190_440),
@@ -75,9 +77,10 @@ describe("fee-estimation", () => {
 
   it("computes inbound fees (Qubic -> Solana) using median relayer fee", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracleQubic5("http://a"),
-      healthyOracleSolana20("http://b"),
-      { ...healthyOracleQubic5("http://c"), relayerFeeSolana: 15n },
+      healthyOracle("http://a", { relayerFeeSolana: 15n }),
+      healthyOracle("http://b", { relayerFeeSolana: 15n }),
+      healthyOracle("http://c", { relayerFeeSolana: 15n }),
+      healthyOracle("http://d"),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(),
@@ -95,10 +98,10 @@ describe("fee-estimation", () => {
 
   it("computes median with 4 oracles (even count)", async (t: TestContext) => {
     const oracles = makeOracleService([
-      { ...healthyOracleQubic5("http://a"), relayerFeeQubic: 2n },
-      { ...healthyOracleSolana20("http://b"), relayerFeeQubic: 4n },
-      { ...healthyOracleQubic5("http://c"), relayerFeeQubic: 6n },
-      { ...healthyOracleQubic5("http://d"), relayerFeeQubic: 8n },
+      healthyOracle("http://a", { relayerFeeQubic: 2n }),
+      healthyOracle("http://b", { relayerFeeQubic: 4n }),
+      healthyOracle("http://c", { relayerFeeQubic: 6n }),
+      healthyOracle("http://d", { relayerFeeQubic: 8n }),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(2_190_440),
@@ -111,10 +114,11 @@ describe("fee-estimation", () => {
     t.assert.strictEqual(result.relayerFee, "5");
   });
 
-  it("rejects when fewer than 3 healthy oracles", async (t: TestContext) => {
+  it("rejects when fewer than 4 healthy oracles", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracleQubic5("http://a"),
-      healthyOracleSolana20("http://b"),
+      healthyOracle("http://a"),
+      healthyOracle("http://b"),
+      healthyOracle("http://c"),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(),
@@ -129,15 +133,19 @@ describe("fee-estimation", () => {
       err = e;
     }
     t.assert.ok(err instanceof Error);
-    t.assert.strictEqual((err as Error).message, ESTIMATE_UNAVAILABLE_MESSAGE);
+    t.assert.strictEqual(
+      (err as Error).message,
+      "Cannot estimate fees: at least 4 healthy oracles required",
+    );
     t.assert.strictEqual((err as Error & { statusCode?: number }).statusCode, 503);
   });
 
   it("rejects when networkIn === networkOut", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracleQubic5("http://a"),
-      healthyOracleSolana20("http://b"),
-      { ...healthyOracleQubic5("http://c"), relayerFeeQubic: 3n },
+      healthyOracle("http://a"),
+      healthyOracle("http://b"),
+      healthyOracle("http://c"),
+      healthyOracle("http://d"),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(),

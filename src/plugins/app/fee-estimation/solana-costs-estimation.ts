@@ -20,7 +20,7 @@ export const OUTBOUND_CU = 30_000;
 export const kSolanaCostsEstimation = Symbol("solana-costs-estimation");
 
 export type SolanaCostsEstimation = {
-  estimateUserNetworkFee(): Promise<number>;
+  estimateUserNetworkFee(): Promise<bigint>;
 };
 
 interface RpcPriorityFeeResponse {
@@ -45,18 +45,27 @@ export function createSolanaCostsEstimation(
     });
   }
 
-  async function getPriorityFeeForCu(cu: number): Promise<number> {
+  async function getPriorityFeeForCu(cu: number): Promise<bigint> {
     const response = await rpc<RpcPriorityFeeResponse>(
       "getPriorityFeeEstimate",
       [{ accountKeys, options: { recommended: true } }],
     );
-    return Math.ceil((response.result.priorityFeeEstimate * cu) / 1_000_000);
+    const microLamportsPerCu = Math.floor(
+      response.result.priorityFeeEstimate,
+    );
+    const fee =
+      (BigInt(microLamportsPerCu) * BigInt(cu) + 999_999n) / 1_000_000n;
+    return fee;
   }
 
   return {
     async estimateUserNetworkFee() {
       const priorityFee = await getPriorityFeeForCu(OUTBOUND_CU);
-      return BASE_FEE_LAMPORTS + priorityFee + OUTBOUND_ORDER_RENT_LAMPORTS;
+      return (
+        BigInt(BASE_FEE_LAMPORTS) +
+        priorityFee +
+        BigInt(OUTBOUND_ORDER_RENT_LAMPORTS)
+      );
     },
   };
 }

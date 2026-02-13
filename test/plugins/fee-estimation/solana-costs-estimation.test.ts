@@ -60,11 +60,13 @@ describe("solana-costs-estimation", () => {
     const service = buildService(origin);
     const fee = await service.estimateUserNetworkFee();
 
-    const expectedPriorityFee = Math.ceil((50_000 * OUTBOUND_CU) / 1_000_000);
-    t.assert.strictEqual(
-      fee,
-      BASE_FEE_LAMPORTS + expectedPriorityFee + OUTBOUND_ORDER_RENT_LAMPORTS,
-    );
+    const expectedPriorityFee =
+      (BigInt(50_000) * BigInt(OUTBOUND_CU) + 999_999n) / 1_000_000n;
+    const expected =
+      BigInt(BASE_FEE_LAMPORTS) +
+      expectedPriorityFee +
+      BigInt(OUTBOUND_ORDER_RENT_LAMPORTS);
+    t.assert.strictEqual(fee, expected);
   });
 
   it("sends the correct account keys to getPriorityFeeEstimate", async (t: TestContext) => {

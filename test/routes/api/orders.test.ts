@@ -5,7 +5,6 @@ import {
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
 import {
-  ESTIMATE_UNAVAILABLE_MESSAGE,
   kFeeEstimation,
 } from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
@@ -280,7 +279,9 @@ test("POST /api/orders/estimate returns 500 on service error", async (t: TestCon
 });
 
 test("POST /api/orders/estimate returns 503 when no healthy oracles", async (t: TestContext) => {
-  const err = new Error(ESTIMATE_UNAVAILABLE_MESSAGE) as Error & {
+  const err = new Error(
+    "Cannot estimate fees: at least 4 healthy oracles required",
+  ) as Error & {
     statusCode?: number;
   };
   err.statusCode = 503;

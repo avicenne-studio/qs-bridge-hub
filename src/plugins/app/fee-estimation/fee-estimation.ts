@@ -14,7 +14,7 @@ import type {
   ChainCostsEstimation,
 } from "./schemas/estimation.js";
 import { median } from "../common/maths.js";
-import { NETWORK_SOLANA } from "../common/schemas/common.js";
+import { Network } from "../common/schemas/common.js";
 import {
   kOracleService,
   type OracleService,
@@ -25,10 +25,7 @@ const PROTOCOL_FEE_BPS_OF_BPS = 1000n;
 
 export const kFeeEstimation = Symbol("fee-estimation");
 
-export const ESTIMATE_UNAVAILABLE_MESSAGE =
-  "Cannot estimate fees: at least 3 healthy oracles required";
-
-const MIN_HEALTHY_ORACLES = 3;
+const MIN_HEALTHY_ORACLES = 4;
 
 export type FeeEstimation = {
   estimate(input: EstimationInput): Promise<EstimationOutput>;
@@ -37,7 +34,7 @@ export type FeeEstimation = {
 export function createFeeEstimationService(
   solanaCosts: SolanaCostsEstimation,
   qubicCosts: ChainCostsEstimation,
-  oracleService: Pick<OracleService, "list">,
+  oracleService: OracleService,
 ): FeeEstimation {
   function computeBridgeFee(amount: bigint) {
     const oracle = (amount * BPS_FEE) / 10_000n;
@@ -45,36 +42,37 @@ export function createFeeEstimationService(
     return { oracle, protocol, total: oracle + protocol };
   }
 
-  function getRelayerFee(isOutbound: boolean): bigint {
+  function getRelayerFee(chain: Network): bigint {
     const healthy = oracleService
       .list()
       .filter((o) => o.status === "ok");
     if (healthy.length < MIN_HEALTHY_ORACLES) {
-      const err = new Error(ESTIMATE_UNAVAILABLE_MESSAGE) as Error & {
-        statusCode?: number;
-      };
+      const err = new Error(
+        "Cannot estimate fees: at least 4 healthy oracles required",
+      ) as Error & { statusCode?: number };
       err.statusCode = 503;
       throw err;
     }
     const fees = healthy.map((o) =>
-      isOutbound ? o.relayerFeeQubic : o.relayerFeeSolana,
+      chain === Network.Solana ? o.relayerFeeSolana : o.relayerFeeQubic,
     );
     return median(fees);
   }
 
   async function getNetworkFee(
-    isOutbound: boolean,
+    chain: Network,
     input: EstimationInput,
   ): Promise<bigint> {
-    if (isOutbound) {
-      return BigInt(await solanaCosts.estimateUserNetworkFee());
+    if (chain === Network.Solana) {
+      return await solanaCosts.estimateUserNetworkFee();
     }
-    return BigInt(await qubicCosts.estimateUserNetworkFee(input));
+    return await qubicCosts.estimateUserNetworkFee(input);
   }
 
   return {
     async estimate(input: EstimationInput): Promise<EstimationOutput> {
-      const isOutbound = input.networkIn === NETWORK_SOLANA;
+      const sourceChain = input.networkIn as Network;
+      const destChain = input.networkOut as Network;
 
       if (input.networkIn === input.networkOut) {
         throw new Error(
@@ -83,8 +81,8 @@ export function createFeeEstimationService(
       }
 
       const bridgeFee = computeBridgeFee(BigInt(input.amount));
-      const relayerFee = getRelayerFee(isOutbound);
-      const networkFee = await getNetworkFee(isOutbound, input);
+      const relayerFee = getRelayerFee(destChain);
+      const networkFee = await getNetworkFee(sourceChain, input);
       const userReceives = BigInt(input.amount) - bridgeFee.total - relayerFee;
 
       return {

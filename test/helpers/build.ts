@@ -128,7 +128,6 @@ export async function build(t?: TestContext, options?: BuildOptions) {
 
   await app.ready();
 
-  // If we pass the test context, it will close the app after we are done
   if (t) {
     t.after(() => app.close());
   }

@@ -17,7 +17,9 @@ export const AmountSchema = Type.String({
   pattern: '^[0-9]+$'
 })
 
-export const NETWORK_QUBIC = 1
-export const NETWORK_SOLANA = 2
+export enum Network {
+  Qubic = 1,
+  Solana = 2,
+}
 
-export const NetworkIdSchema = Type.Integer({ minimum: 1, maximum: 2 })
+export const NetworkIdSchema = Type.Enum(Network)

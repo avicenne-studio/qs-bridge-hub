@@ -8,6 +8,6 @@ describe("qubic-costs-estimation", () => {
   it("returns mock network fee", async (t: TestContext) => {
     const service = createQubicCostsEstimation();
     const fee = await service.estimateUserNetworkFee();
-    t.assert.strictEqual(fee, MOCK_USER_NETWORK_FEE_QUBIC);
+    t.assert.strictEqual(fee, BigInt(MOCK_USER_NETWORK_FEE_QUBIC));
   });
 });
