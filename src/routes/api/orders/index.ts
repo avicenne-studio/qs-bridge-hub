@@ -21,6 +21,14 @@ import { AppConfig, kConfig } from "../../../plugins/infra/env.js";
 import { StoredEventSchema } from "../../../plugins/app/events/schemas/event.js";
 import { EventsRepository, kEventsRepository } from "../../../plugins/app/events/events.repository.js";
 import { computeRequiredSignatures } from "../../../plugins/app/oracle-service.js";
+import {
+  kFeeEstimation,
+  type FeeEstimation,
+} from "../../../plugins/app/fee-estimation/fee-estimation.js";
+import {
+  EstimationBodySchema,
+  EstimationResponseSchema,
+} from "../../../plugins/app/fee-estimation/schemas/estimation.js";
 
 const OrderDirectionSchema = Type.Union(
   [Type.Literal("asc"), Type.Literal("desc")],
@@ -92,12 +100,15 @@ const EventsResponseSchema = Type.Object({
   cursor: EventsCursorSchema,
 });
 
+
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const ordersRepository =
     fastify.getDecorator<OrdersRepository>(kOrdersRepository);
   const config = fastify.getDecorator<AppConfig>(kConfig);
   const eventsRepository =
     fastify.getDecorator<EventsRepository>(kEventsRepository);
+  const feeEstimation =
+    fastify.getDecorator<FeeEstimation>(kFeeEstimation);
   fastify.get(
     "/",
     {
@@ -236,6 +247,22 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         }
 
         return { data: order };
+    }
+  );
+
+  fastify.post(
+    "/estimate",
+    {
+      schema: {
+        body: EstimationBodySchema,
+        response: {
+          200: EstimationResponseSchema,
+        },
+      },
+    },
+    async function handler(request) {
+      const result = await feeEstimation.estimate(request.body);
+      return { data: result };
     }
   );
 };

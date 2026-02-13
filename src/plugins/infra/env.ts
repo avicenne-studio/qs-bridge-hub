@@ -24,6 +24,7 @@ export type AppConfig = {
   SOLANA_WS_RECONNECT_BASE_MS: number;
   SOLANA_WS_RECONNECT_MAX_MS: number;
   SOLANA_WS_FALLBACK_RETRY_MS: number;
+  TOKEN_MINT: string;
 };
 
 export const kConfig = 'config'
@@ -45,7 +46,8 @@ const schema = {
     'HELIUS_POLLER_ENABLED',
     'HELIUS_POLLER_INTERVAL_MS',
     'HELIUS_POLLER_LOOKBACK_SECONDS',
-    'HELIUS_POLLER_TIMEOUT_MS'
+    'HELIUS_POLLER_TIMEOUT_MS',
+    'TOKEN_MINT'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -144,6 +146,9 @@ const schema = {
       type: 'number',
       minimum: 0,
       default: 60_000
+    },
+    TOKEN_MINT: {
+      type: 'string',
     }
   }
 }

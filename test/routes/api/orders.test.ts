@@ -6,6 +6,9 @@ import {
   kOrdersRepository,
   type OrdersRepository,
 } from "../../../src/plugins/app/indexer/orders.repository.js";
+import {
+  kFeeEstimation,
+} from "../../../src/plugins/app/fee-estimation/fee-estimation.js";
 
 const makeId = (value: number) =>
   `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
@@ -315,6 +318,116 @@ test("GET /api/orders handles repository errors", async (t: TestContext) => {
   t.assert.strictEqual(logMsg, "Failed to list orders");
   t.assert.strictEqual(logPayload.err.message, "db down");
 
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.message, "Internal Server Error");
+});
+
+const VALID_ESTIMATION_PAYLOAD = {
+  networkIn: 2,
+  networkOut: 1,
+  fromAddress: "46F9i1Bzv8kwShyG8xbtdkA7nEoYmzyueKwjXyDgtAQV",
+  toAddress: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  amount: "1000000",
+};
+
+test("POST /api/orders/estimate returns fee breakdown", async (t: TestContext) => {
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() =>
+      Promise.resolve({
+        bridgeFee: { oracleFee: "10000", protocolFee: "1000", total: "11000" },
+        relayerFee: "1",
+        networkFee: "2190440",
+        userReceives: "988999",
+      }),
+    ),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
+
+  const res = await app.inject({
+    url: "/api/orders/estimate",
+    method: "POST",
+    payload: VALID_ESTIMATION_PAYLOAD,
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.bridgeFee.total, "11000");
+  t.assert.strictEqual(body.data.relayerFee, "1");
+  t.assert.strictEqual(body.data.networkFee, "2190440");
+  t.assert.strictEqual(body.data.userReceives, "988999");
+  t.assert.strictEqual(fakeFeeEstimation.estimate.mock.callCount(), 1);
+});
+
+test("POST /api/orders/estimate returns 400 for invalid payload", async (t: TestContext) => {
+  const app = await build(t);
+
+  const res = await app.inject({
+    url: "/api/orders/estimate",
+    method: "POST",
+    payload: {
+      networkIn: 2,
+      networkOut: 1,
+      fromAddress: "not-a-valid-base58!",
+      toAddress: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      amount: "1000000",
+    },
+  });
+
+  t.assert.strictEqual(res.statusCode, 400);
+});
+
+test("POST /api/orders/estimate returns 500 on service error", async (t: TestContext) => {
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() => Promise.reject(new Error("RPC unreachable"))),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
+
+  const { mock: logMock } = t.mock.method(app.log, "error");
+
+  const res = await app.inject({
+    url: "/api/orders/estimate",
+    method: "POST",
+    payload: VALID_ESTIMATION_PAYLOAD,
+  });
+
+  t.assert.strictEqual(res.statusCode, 500);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [logPayload, logMsg] = logMock.calls[0].arguments as any;
+  t.assert.strictEqual(logMsg, "Unhandled error occurred");
+  t.assert.strictEqual(logPayload.err.message, "RPC unreachable");
+
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.message, "Internal Server Error");
+});
+
+test("POST /api/orders/estimate returns 503 when no healthy oracles", async (t: TestContext) => {
+  const err = new Error(
+    "Cannot estimate fees: at least 4 healthy oracles required",
+  ) as Error & {
+    statusCode?: number;
+  };
+  err.statusCode = 503;
+  const fakeFeeEstimation = {
+    estimate: t.mock.fn(() => Promise.reject(err)),
+  };
+
+  const app = await build(t, {
+    decorators: { [kFeeEstimation]: fakeFeeEstimation },
+  });
+
+  const res = await app.inject({
+    url: "/api/orders/estimate",
+    method: "POST",
+    payload: VALID_ESTIMATION_PAYLOAD,
+  });
+
+  t.assert.strictEqual(res.statusCode, 503);
   const body = JSON.parse(res.payload);
   t.assert.strictEqual(body.message, "Internal Server Error");
 });

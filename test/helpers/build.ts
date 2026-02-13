@@ -1,4 +1,7 @@
-import fastify, { type FastifyInstance, type LightMyRequestResponse } from "fastify";
+import fastify, {
+  type FastifyInstance,
+  type LightMyRequestResponse,
+} from "fastify";
 import { TestContext } from "node:test";
 import serviceApp from "../../src/app.js";
 import fp from "fastify-plugin";
@@ -20,7 +23,7 @@ export function config() {
 export function expectValidationError(
   t: TestContext,
   res: LightMyRequestResponse,
-  expectedMessage: string
+  expectedMessage: string,
 ) {
   t.assert.strictEqual(res.statusCode, 400);
   const { message } = JSON.parse(res.payload);
@@ -62,15 +65,18 @@ const DEFAULT_TEST_CONFIG: AppConfig = {
   SOLANA_WS_RECONNECT_BASE_MS: 50,
   SOLANA_WS_RECONNECT_MAX_MS: 200,
   SOLANA_WS_FALLBACK_RETRY_MS: 200,
+  TOKEN_MINT: "So1111111111111111111111111111111111111111",
 };
 
-function resolveBuildOptions(options?: BuildOptions | BuildHooks): BuildOptions {
+function resolveBuildOptions(
+  options?: BuildOptions | BuildHooks,
+): BuildOptions {
   return options ?? {};
 }
 
 function applyDecorators(
   app: FastifyInstance,
-  decorators: Record<PropertyKey, unknown>
+  decorators: Record<PropertyKey, unknown>,
 ) {
   for (const [key, value] of Object.entries(decorators)) {
     if (app.hasDecorator(key)) {
@@ -122,9 +128,6 @@ export async function build(t?: TestContext, options?: BuildOptions) {
 
   await app.ready();
 
-  // This is after start, so we can't decorate the instance using `.decorate`
-
-  // If we pass the test contest, it will close the app after we are done
   if (t) {
     t.after(() => app.close());
   }
