@@ -21,6 +21,10 @@ export type AppConfig = {
   HELIUS_POLLER_INTERVAL_MS: number;
   HELIUS_POLLER_LOOKBACK_SECONDS: number;
   HELIUS_POLLER_TIMEOUT_MS: number;
+  QUBIC_RPC_URL: string;
+  QUBIC_POLLER_ENABLED: boolean;
+  QUBIC_POLLER_INTERVAL_MS: number;
+  QUBIC_POLLER_TIMEOUT_MS: number;
   SOLANA_WS_RECONNECT_BASE_MS: number;
   SOLANA_WS_RECONNECT_MAX_MS: number;
   SOLANA_WS_FALLBACK_RETRY_MS: number;
@@ -47,7 +51,11 @@ const schema = {
     'HELIUS_POLLER_INTERVAL_MS',
     'HELIUS_POLLER_LOOKBACK_SECONDS',
     'HELIUS_POLLER_TIMEOUT_MS',
-    'TOKEN_MINT'
+    'TOKEN_MINT',
+    'QUBIC_RPC_URL',
+    'QUBIC_POLLER_ENABLED',
+    'QUBIC_POLLER_INTERVAL_MS',
+    'QUBIC_POLLER_TIMEOUT_MS'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -131,6 +139,23 @@ const schema = {
       type: 'number',
       minimum: 1000,
       default: 30_000
+    },
+    QUBIC_RPC_URL: {
+      type: 'string',
+    },
+    QUBIC_POLLER_ENABLED: {
+      type: 'boolean',
+      default: false
+    },
+    QUBIC_POLLER_INTERVAL_MS: {
+      type: 'number',
+      minimum: 1000,
+      default: 5_000
+    },
+    QUBIC_POLLER_TIMEOUT_MS: {
+      type: 'number',
+      minimum: 1000,
+      default: 5_000
     },
     SOLANA_WS_RECONNECT_BASE_MS: {
       type: 'number',
