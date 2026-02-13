@@ -87,23 +87,23 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         )
         .select(knex.raw("count(*) OVER() as total"));
 
-      if (q.source !== undefined) {
+      if (q.source) {
         query.where({ source: q.source });
       }
 
-      if (q.dest !== undefined) {
+      if (q.dest) {
         query.where({ dest: q.dest });
       }
 
-      if (q.status !== undefined && q.status.length > 0) {
+      if (q.status && q.status.length > 0) {
         query.whereIn("status", q.status);
       }
 
-      if (q.from !== undefined) {
+      if (q.from) {
         query.where({ from: q.from });
       }
 
-      if (q.to !== undefined) {
+      if (q.to) {
         query.where({ to: q.to });
       }
 
