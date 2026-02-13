@@ -1,10 +1,10 @@
 import fp from "fastify-plugin";
 import { FastifyInstance } from "fastify";
 import { kKnex, type KnexAccessor } from "../../infra/knex.js";
-import {
-  type SolanaEventPayload,
-  type StoredEvent,
-} from "./schemas/event.js";
+import { type StoredEvent } from "./schemas/event.js";
+import { type SolanaEventPayload } from "./solana/schemas/event.js";
+import { type QubicEventPayload } from "./qubic/schemas/event.js";
+import { type EventPayload } from "./schemas/types.js";
 
 export const EVENTS_TABLE_NAME = "events";
 export const kEventsRepository = Symbol("app.eventsRepository");
@@ -23,10 +23,10 @@ type PersistedEvent = {
 export type NewEvent = {
   signature: string;
   slot: number | null;
-  chain: "solana";
-  type: "outbound" | "override-outbound";
+  chain: "solana" | "qubic";
+  type: "outbound" | "override-outbound" | "lock" | "override-lock";
   nonce: string;
-  payload: SolanaEventPayload;
+  payload: SolanaEventPayload | QubicEventPayload;
 };
 
 export type EventsRepository = {
@@ -47,7 +47,7 @@ function normalizeEvent(row: PersistedEvent): StoredEvent {
     chain: row.chain as StoredEvent["chain"],
     type: row.type as StoredEvent["type"],
     nonce: row.nonce,
-    payload: JSON.parse(row.payload) as SolanaEventPayload,
+    payload: JSON.parse(row.payload) as EventPayload,
     createdAt: row.created_at,
   };
 }
