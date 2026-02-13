@@ -20,6 +20,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -32,6 +34,8 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "25",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });
@@ -59,6 +63,116 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].dest, "qubic");
   t.assert.strictEqual(body.data[0].status, "in-progress");
   t.assert.strictEqual(body.data[0].oracle_accept_to_relay, false);
+});
+
+test("GET /api/orders filters by status (multiple)", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&status=in-progress&status=finalized",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.pagination.total, 2);
+});
+
+test("GET /api/orders filters by from", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&from=A",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].from, "A");
+  t.assert.strictEqual(body.data[0].id, makeId(401));
+});
+
+test("GET /api/orders filters by to", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&to=D",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].to, "D");
+  t.assert.strictEqual(body.data[0].id, makeId(402));
+});
+
+test("GET /api/orders filters by amount_min and amount_max", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&amount_min=15&amount_max=30",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].amount, "25");
+  t.assert.strictEqual(body.data[0].id, makeId(402));
+});
+
+test("GET /api/orders filters by id", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const orderId = makeId(401);
+  const res = await app.inject({
+    url: `/api/orders?page=1&limit=10&id=${encodeURIComponent(orderId)}`,
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 1);
+  t.assert.strictEqual(body.data[0].id, orderId);
+  t.assert.strictEqual(body.data[0].from, "A");
+});
+
+test("GET /api/orders filters by created_after (returns orders created after date)", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&created_after=1970-01-01T00:00:00.000Z",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.pagination.total, 2);
+});
+
+test("GET /api/orders filters by created_before", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  const res = await app.inject({
+    url: "/api/orders?page=1&limit=10&created_before=2099-01-01T00:00:00.000Z",
+    method: "GET",
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.pagination.total, 2);
 });
 
 test("GET /api/orders/trx-hash returns order by transaction hash", async (t: TestContext) => {
@@ -104,6 +218,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
@@ -116,6 +232,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "20",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "in-progress",
   });
@@ -128,6 +246,8 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     amount: "30",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
+    source_nonce: "nonce",
+    source_payload: "{\"v\":1}",
     oracle_accept_to_relay: false,
     status: "finalized",
   });

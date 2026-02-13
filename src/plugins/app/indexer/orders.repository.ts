@@ -42,6 +42,14 @@ export type OrderQuery = {
   order: "asc" | "desc";
   source?: OracleOrder["source"];
   dest?: OracleOrder["dest"];
+  status?: OracleOrder["status"][];
+  from?: string;
+  to?: string;
+  amount_min?: string;
+  amount_max?: string;
+  created_after?: string;
+  created_before?: string;
+  id?: string;
 };
 
 type OrderWithTotal = StoredOrder & { total: number };
@@ -85,6 +93,38 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
 
       if (q.dest !== undefined) {
         query.where({ dest: q.dest });
+      }
+
+      if (q.status !== undefined && q.status.length > 0) {
+        query.whereIn("status", q.status);
+      }
+
+      if (q.from !== undefined) {
+        query.where({ from: q.from });
+      }
+
+      if (q.to !== undefined) {
+        query.where({ to: q.to });
+      }
+
+      if (q.amount_min !== undefined) {
+        query.whereRaw("CAST(amount AS INTEGER) >= ?", [q.amount_min]);
+      }
+
+      if (q.amount_max !== undefined) {
+        query.whereRaw("CAST(amount AS INTEGER) <= ?", [q.amount_max]);
+      }
+
+      if (q.created_after !== undefined) {
+        query.where("created_at", ">=", q.created_after);
+      }
+
+      if (q.created_before !== undefined) {
+        query.where("created_at", "<=", q.created_before);
+      }
+
+      if (q.id !== undefined) {
+        query.where({ id: q.id });
       }
 
       const rows = (await query
