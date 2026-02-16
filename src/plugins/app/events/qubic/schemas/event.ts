@@ -7,6 +7,7 @@ export const QubicEventChainSchema = Type.Literal("qubic");
 export const QubicEventTypeSchema = Type.Union([
   Type.Literal("lock"),
   Type.Literal("override-lock"),
+  Type.Literal("unlock"),
 ]);
 
 export const QubicLockEventPayloadSchema = Type.Object({
@@ -25,9 +26,16 @@ export const QubicOverrideLockEventPayloadSchema = Type.Object({
   amount: AmountSchema,
 });
 
+export const QubicUnlockEventPayloadSchema = Type.Object({
+  toAddress: StringSchema,
+  amount: AmountSchema,
+  nonce: StringSchema,
+});
+
 export const QubicEventPayloadSchema = Type.Union([
   QubicLockEventPayloadSchema,
   QubicOverrideLockEventPayloadSchema,
+  QubicUnlockEventPayloadSchema,
 ]);
 
 export const QubicStoredEventSchema = createStoredEventSchema({
