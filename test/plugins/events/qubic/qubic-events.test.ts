@@ -78,4 +78,28 @@ describe("qubic event handlers", () => {
     t.assert.strictEqual(eventsRepository.store.length, 1);
     t.assert.strictEqual(eventsRepository.store[0].signature, "trx-2");
   });
+
+  it("stores unlock events", async (t: TestContext) => {
+    const { logger } = createLogger();
+    const eventsRepository = createEventsRepository();
+    const { handleQubicEvent } = createQubicEventHandlers({
+      eventsRepository: eventsRepository as never,
+      logger: logger as never,
+    });
+
+    await handleQubicEvent({
+      chain: "qubic",
+      type: "unlock",
+      nonce: "3",
+      trxHash: "trx-3",
+      payload: {
+        toAddress: "id(9,9,9,9)",
+        amount: "99",
+        nonce: "3",
+      },
+    });
+
+    t.assert.strictEqual(eventsRepository.store.length, 1);
+    t.assert.strictEqual(eventsRepository.store[0].signature, "trx-3");
+  });
 });

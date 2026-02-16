@@ -24,7 +24,7 @@ export type NewEvent = {
   signature: string;
   slot: number | null;
   chain: "solana" | "qubic";
-  type: "outbound" | "override-outbound" | "lock" | "override-lock";
+  type: "outbound" | "override-outbound" | "lock" | "override-lock" | "unlock";
   nonce: string;
   payload: SolanaEventPayload | QubicEventPayload;
 };
