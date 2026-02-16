@@ -4,7 +4,7 @@ import type { QubicEventPayload } from "./schemas/event.js";
 
 export type QubicEvent = {
   chain: "qubic";
-  type: "lock" | "override-lock";
+  type: "lock" | "override-lock" | "unlock";
   nonce: string;
   payload: QubicEventPayload;
   trxHash?: string;

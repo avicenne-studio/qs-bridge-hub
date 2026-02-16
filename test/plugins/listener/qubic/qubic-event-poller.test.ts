@@ -28,6 +28,21 @@ function createQubicEvent(overrides: Partial<QubicEvent> = {}): QubicEvent {
   };
 }
 
+function createQubicUnlockEvent(overrides: Partial<QubicEvent> = {}): QubicEvent {
+  return {
+    chain: "qubic",
+    type: "unlock",
+    nonce: "9",
+    payload: {
+      toAddress: "id(9,9,9,9)",
+      amount: "99",
+      nonce: "9",
+    },
+    trxHash: "trx-unlock",
+    ...overrides,
+  };
+}
+
 function qubicJsonHandler(data: QubicEvent[]): RequestListener {
   return (_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
@@ -85,6 +100,19 @@ describe("qubic poller plugin", () => {
     t.assert.strictEqual(eventsRepo.store[0].signature, "trx-1");
     t.assert.strictEqual(eventsRepo.store[0].chain, "qubic");
     t.assert.strictEqual(eventsRepo.store[0].type, "lock");
+  });
+
+  it("stores unlock events from the qubic poller", async (t: TestContext) => {
+    const { port } = await createQubicServer(t, qubicJsonHandler([
+      createQubicUnlockEvent({ trxHash: "trx-unlock-1" }),
+    ]));
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    t.assert.strictEqual(eventsRepo.store[0].signature, "trx-unlock-1");
+    t.assert.strictEqual(eventsRepo.store[0].type, "unlock");
   });
 
   it("handles array responses from the qubic endpoint", async (t: TestContext) => {
