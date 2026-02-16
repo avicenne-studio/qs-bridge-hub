@@ -3,7 +3,7 @@ import type { OutboundEvent } from "../../../../clients/js/types/outboundEvent.j
 import type { OverrideOutboundEvent } from "../../../../clients/js/types/overrideOutboundEvent.js";
 import type { InboundEvent } from "../../../../clients/js/types/inboundEvent.js";
 import { bytesToHex } from "./bytes.js";
-import type { EventsRepository } from "../../events/events.repository.js";
+import type { EventsRepository } from "../events.repository.js";
 
 type Logger = FastifyBaseLogger;
 

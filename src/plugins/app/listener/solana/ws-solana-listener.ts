@@ -7,7 +7,7 @@ import {
   isKnownEventSize,
   logLinesToEvents,
 } from "./solana-program-logs.js";
-import { createSolanaEventHandlers } from "./solana-events.js";
+import { createSolanaEventHandlers } from "../../events/solana/solana-events.js";
 import {
   createJsonRpcClient,
   parseJsonRpcMessage,

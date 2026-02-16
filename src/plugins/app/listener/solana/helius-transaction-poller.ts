@@ -10,7 +10,7 @@ import {
   type UndiciClientService,
   UndiciClient,
 } from "../../../infra/undici-client.js";
-import { createSolanaEventHandlers } from "./solana-events.js";
+import { createSolanaEventHandlers } from "../../events/solana/solana-events.js";
 import { logLinesToEvents, decodeEventBytes } from "./solana-program-logs.js";
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../../../../clients/js/programs/qsBridge.js";
 
