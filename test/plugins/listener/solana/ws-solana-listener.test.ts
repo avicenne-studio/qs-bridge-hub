@@ -265,7 +265,7 @@ describe("ws solana listener plugin", () => {
     await app.close();
   });
 
-  it("skips inbound transactions", async (t) => {
+  it("stores inbound event (mint finalized)", async (t) => {
     const { app, ws, eventsRepository } = await buildListenerApp({ t });
 
     ws.emit("open", {});
@@ -281,9 +281,12 @@ describe("ws solana listener plugin", () => {
 
     ws.emit("message", { data: payload });
 
-    await waitFor(() => ws.sent.length > 0);
+    await waitFor(() => eventsRepository.store.length >= 1);
 
-    assert.strictEqual(eventsRepository.store.length, 0);
+    assert.strictEqual(eventsRepository.store.length, 1);
+    assert.strictEqual(eventsRepository.store[0].type, "inbound");
+    assert.strictEqual(eventsRepository.store[0].signature, "sig-inbound");
+    assert.strictEqual(eventsRepository.store[0].slot, 42);
 
     await app.close();
   });

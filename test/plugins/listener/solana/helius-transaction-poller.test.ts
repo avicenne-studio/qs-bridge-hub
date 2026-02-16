@@ -82,7 +82,7 @@ describe("helius poller plugin", () => {
     assert.strictEqual(eventsRepo.store[0].type, "outbound");
   });
 
-  it("filters out inbound events, keeps outbound and override-outbound", async (t: TestContext) => {
+  it("processes outbound, override-outbound and inbound events", async (t: TestContext) => {
     const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-1", 100, [toLogLine(createEventBytes("outbound"))]),
       createTransaction("sig-2", 200, [toLogLine(createEventBytes("override"))]),
@@ -91,11 +91,12 @@ describe("helius poller plugin", () => {
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    await waitFor(() => eventsRepo.store.length >= 2);
+    await waitFor(() => eventsRepo.store.length >= 3);
 
-    assert.strictEqual(eventsRepo.store.length, 2);
-    assert.ok(eventsRepo.store.some((e) => e.type === "outbound"));
-    assert.ok(eventsRepo.store.some((e) => e.type === "override-outbound"));
+    assert.strictEqual(eventsRepo.store.length, 3);
+    assert.ok(eventsRepo.store.some((e) => e.type === "outbound" && e.signature === "sig-1"));
+    assert.ok(eventsRepo.store.some((e) => e.type === "override-outbound" && e.signature === "sig-2"));
+    assert.ok(eventsRepo.store.some((e) => e.type === "inbound" && e.signature === "sig-3"));
   });
 
   it("skips transactions with meta.err", async (t: TestContext) => {

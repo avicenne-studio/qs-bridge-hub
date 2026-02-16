@@ -6,7 +6,7 @@ import {
   toSafeBigInt,
   toSafeNumber,
   toU64BigInt,
-} from "../../../../src/plugins/app/listener/solana/bytes.js";
+} from "../../../../src/plugins/app/events/solana/bytes.js";
 
 describe("solana listener bytes helpers", () => {
   it("round-trips hex and bytes", () => {

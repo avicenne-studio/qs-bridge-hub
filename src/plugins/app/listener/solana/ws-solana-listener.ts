@@ -7,7 +7,7 @@ import {
   isKnownEventSize,
   logLinesToEvents,
 } from "./solana-program-logs.js";
-import { createSolanaEventHandlers } from "./solana-events.js";
+import { createSolanaEventHandlers } from "../../events/solana/solana-events.js";
 import {
   createJsonRpcClient,
   parseJsonRpcMessage,
@@ -105,11 +105,14 @@ export default fp(
 
     let subscribeRequestId: number | null = null;
     const seenUnknownEventSizes = new Set<number>();
-    const { handleOutboundEvent, handleOverrideOutboundEvent } =
-      createSolanaEventHandlers({
-        eventsRepository,
-        logger: fastify.log,
-      });
+    const {
+      handleOutboundEvent,
+      handleOverrideOutboundEvent,
+      handleInboundEvent,
+    } = createSolanaEventHandlers({
+      eventsRepository,
+      logger: fastify.log,
+    });
 
     const sendRequest = (method: string, params?: unknown[]) =>
       rpc.sendRequest(method, params);
@@ -182,14 +185,6 @@ export default fp(
           continue;
         }
 
-        if (decoded.type === "inbound") {
-          fastify.log.info(
-            { signature, slot },
-            "Solana inbound event ignored"
-          );
-          continue;
-        }
-
         void queue.push(async () => {
           try {
             if (decoded.type === "outbound") {
@@ -203,7 +198,16 @@ export default fp(
                 { signature, type: decoded.type },
                 "Solana override outbound event received"
               );
-              await handleOverrideOutboundEvent(decoded.event, { signature, slot });
+              await handleOverrideOutboundEvent(decoded.event, {
+                signature,
+                slot,
+              });
+            } else if (decoded.type === "inbound") {
+              fastify.log.info(
+                { signature, type: decoded.type },
+                "Solana inbound event received"
+              );
+              await handleInboundEvent(decoded.event, { signature, slot });
             }
           } catch (error) {
             fastify.log.error(
