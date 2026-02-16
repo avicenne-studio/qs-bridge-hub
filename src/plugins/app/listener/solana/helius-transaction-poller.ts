@@ -105,8 +105,11 @@ export default fp(
     const undiciService =
       fastify.getDecorator<UndiciClientService>(kUndiciClient);
 
-    const { handleOutboundEvent, handleOverrideOutboundEvent } =
-      createSolanaEventHandlers({ eventsRepository, logger: fastify.log });
+    const {
+      handleOutboundEvent,
+      handleOverrideOutboundEvent,
+      handleInboundEvent,
+    } = createSolanaEventHandlers({ eventsRepository, logger: fastify.log });
 
     const client = undiciService.create();
     const fetcher = resolveHeliusFetcher(fastify, () =>
@@ -132,8 +135,8 @@ export default fp(
           await handleOutboundEvent(decoded.event, txMeta);
         } else if (decoded.type === "override-outbound") {
           await handleOverrideOutboundEvent(decoded.event, txMeta);
-        } else {
-          fastify.log.info(`Unhandled event ${decoded.type}`);
+        } else if (decoded.type === "inbound") {
+          await handleInboundEvent(decoded.event, txMeta);
         }
       }
     };

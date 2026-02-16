@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { OutboundEvent } from "../../../../clients/js/types/outboundEvent.js";
 import type { OverrideOutboundEvent } from "../../../../clients/js/types/overrideOutboundEvent.js";
+import type { InboundEvent } from "../../../../clients/js/types/inboundEvent.js";
 import { bytesToHex } from "./bytes.js";
 import type { EventsRepository } from "../../events/events.repository.js";
 
@@ -33,6 +34,20 @@ function buildOutboundPayload(event: OutboundEvent) {
 function buildOverridePayload(event: OverrideOutboundEvent) {
   return {
     toAddress: bytesToHex(event.toAddress),
+    relayerFee: event.relayerFee.toString(),
+    nonce: bytesToHex(event.nonce),
+  };
+}
+
+function buildInboundPayload(event: InboundEvent) {
+  return {
+    networkIn: event.networkIn,
+    networkOut: event.networkOut,
+    tokenIn: bytesToHex(event.tokenIn),
+    tokenOut: bytesToHex(event.tokenOut),
+    fromAddress: bytesToHex(event.fromAddress),
+    toAddress: bytesToHex(event.toAddress),
+    amount: event.amount.toString(),
     relayerFee: event.relayerFee.toString(),
     nonce: bytesToHex(event.nonce),
   };
@@ -87,5 +102,32 @@ export function createSolanaEventHandlers(deps: SolanaEventDependencies) {
     );
   };
 
-  return { handleOutboundEvent, handleOverrideOutboundEvent };
+  const handleInboundEvent = async (
+    event: InboundEvent,
+    meta?: SolanaEventMeta
+  ) => {
+    if (!meta?.signature) {
+      logger.warn("Solana inbound event missing transaction signature");
+      return;
+    }
+    const payload = buildInboundPayload(event);
+    await eventsRepository.create({
+      signature: meta.signature,
+      slot: meta.slot ?? null,
+      chain: "solana",
+      type: "inbound",
+      nonce: payload.nonce,
+      payload,
+    });
+    logger.info(
+      { signature: meta.signature, slot: meta.slot },
+      "Solana inbound event stored"
+    );
+  };
+
+  return {
+    handleOutboundEvent,
+    handleOverrideOutboundEvent,
+    handleInboundEvent,
+  };
 }
