@@ -30,6 +30,9 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     "/bridge",
     {
       schema: {
+        summary: "Bridge health",
+        description: "Returns basic bridge status flags.",
+        tags: ["Health"],
         response: {
           200: BridgeHealthResponseSchema,
         },
@@ -44,6 +47,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     "/oracles",
     {
       schema: {
+        summary: "Oracle health registry",
+        description:
+          "Returns the latest health snapshot of configured oracles, including relayer fee configuration.",
+        tags: ["Health"],
         response: {
           200: OraclesHealthResponseSchema,
         },

@@ -26,6 +26,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     "/",
     {
       schema: {
+        summary: "Get Hub public keys",
+        description:
+          "Returns the Hub id with the current public key and optional next key to support key rotation. Oracles can fetch this endpoint to verify `X-Hub-*` signatures and pre-trust the next key before rotation.",
+        tags: ["Keys"],
         response: {
           200: KeysResponseSchema,
         },

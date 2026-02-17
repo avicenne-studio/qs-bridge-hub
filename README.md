@@ -95,6 +95,12 @@ Access the API at:
 http://localhost:3000
 ```
 
+Swagger UI is available at:
+
+```
+http://localhost:3000/docs
+```
+
 The SQLite database is stored in the `hub-sqlite` Docker volume at `/data/hub.sqlite3`.
 Any changes to local `.ts` files reload automatically inside the container.
 

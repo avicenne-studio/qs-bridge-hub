@@ -8,6 +8,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     '/',
     {
       schema: {
+        hide: true,
         response: {
           200: Type.Object({
             message: Type.String()

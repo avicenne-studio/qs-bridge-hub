@@ -3,15 +3,11 @@ import {
   Type,
 } from "@fastify/type-provider-typebox";
 import {
-  OracleChain,
   OracleOrderSchema,
   OracleOrderStatus,
 } from "../../../plugins/app/indexer/schemas/order.js";
 import {
-  AmountSchema,
-  DateTimeSchema,
   IdSchema,
-  StringSchema,
 } from "../../../plugins/app/common/schemas/common.js";
 import {
   kOrdersRepository,
@@ -30,25 +26,90 @@ import {
   EstimationResponseSchema,
 } from "../../../plugins/app/fee-estimation/schemas/estimation.js";
 
-const OrderDirectionSchema = Type.Union(
-  [Type.Literal("asc"), Type.Literal("desc")],
-  { default: "desc" }
-);
-
 const OrdersQueryParamsSchema = Type.Object({
-  page: Type.Integer({ minimum: 1, default: 1 }),
-  limit: Type.Integer({ minimum: 1, maximum: 100, default: 10 }),
-  order: OrderDirectionSchema,
-  source: Type.Optional(OracleChain),
-  dest: Type.Optional(OracleChain),
-  status: Type.Optional(Type.Array(OracleOrderStatus)),
-  from: Type.Optional(StringSchema),
-  to: Type.Optional(StringSchema),
-  amount_min: Type.Optional(AmountSchema),
-  amount_max: Type.Optional(AmountSchema),
-  created_after: Type.Optional(DateTimeSchema),
-  created_before: Type.Optional(DateTimeSchema),
-  id: Type.Optional(IdSchema),
+  page: Type.Integer({
+    minimum: 1,
+    default: 1,
+    description: "Page number (1-based).",
+    examples: [1],
+  }),
+  limit: Type.Integer({
+    minimum: 1,
+    maximum: 100,
+    default: 10,
+    description: "Number of orders per page (max 100).",
+    examples: [10],
+  }),
+  order: Type.Union(
+    [Type.Literal("asc"), Type.Literal("desc")],
+    {
+      default: "desc",
+      description: "Sort order for `created_at`.",
+      examples: ["desc"],
+    }
+  ),
+  source: Type.Optional(
+    Type.Union([Type.Literal("qubic"), Type.Literal("solana")], {
+      description: "Filter by source chain.",
+      examples: ["qubic"],
+    })
+  ),
+  dest: Type.Optional(
+    Type.Union([Type.Literal("qubic"), Type.Literal("solana")], {
+      description: "Filter by destination chain.",
+      examples: ["solana"],
+    })
+  ),
+  status: Type.Optional(
+    Type.Array(OracleOrderStatus, {
+      description: "Filter by one or more order statuses.",
+      examples: [["ready-for-relay", "finalized"]],
+    })
+  ),
+  from: Type.Optional(
+    Type.String({
+      description: "Filter by sender address.",
+      examples: ["QUBIC_SENDER_ADDR"],
+    })
+  ),
+  to: Type.Optional(
+    Type.String({
+      description: "Filter by recipient address.",
+      examples: ["SOLANA_RECIPIENT_ADDR"],
+    })
+  ),
+  amount_min: Type.Optional(
+    Type.String({
+      pattern: "^[0-9]+$",
+      description: "Minimum amount (integer string).",
+      examples: ["1000"],
+    })
+  ),
+  amount_max: Type.Optional(
+    Type.String({
+      pattern: "^[0-9]+$",
+      description: "Maximum amount (integer string).",
+      examples: ["500000"],
+    })
+  ),
+  created_after: Type.Optional(
+    Type.String({
+      description: "ISO-8601 lower bound on created_at.",
+      examples: ["2024-01-01T00:00:00.000Z"],
+    })
+  ),
+  created_before: Type.Optional(
+    Type.String({
+      description: "ISO-8601 upper bound on created_at.",
+      examples: ["2024-01-31T23:59:59.999Z"],
+    })
+  ),
+  id: Type.Optional(
+    Type.String({
+      description: "Filter by order id.",
+      examples: ["7b1d6f2c-7b4f-4bb8-8c53-0c1e87a1b2b1"],
+    })
+  ),
 });
 
 const StoredOrderSchema = Type.Intersect([
@@ -66,14 +127,20 @@ const OrdersResponseSchema = Type.Object({
 });
 
 const OrderByTrxHashQuerySchema = Type.Object({
-  hash: StringSchema,
+  hash: Type.String({
+    description: "Origin transaction hash to lookup.",
+    examples: ["0xabc123"],
+  }),
 });
 
 const OrderByTrxHashResponseSchema = Type.Object({
   data: StoredOrderSchema,
 });
 
-const SignatureSchema = StringSchema;
+const SignatureSchema = Type.String({
+  description: "Oracle signature payload (string-encoded).",
+  examples: ["0xdeadbeef"],
+});
 
 const RelayableSignatureSchema = Type.Object({
   orderId: IdSchema,
@@ -85,13 +152,32 @@ const RelayableSignaturesSchema = Type.Object({
 });
 
 const EventsQueryParamsSchema = Type.Object({
-  created_after: StringSchema,
-  after_id: Type.Integer({ minimum: 0, default: 0 }),
-  limit: Type.Integer({ minimum: 1, maximum: 100, default: 50 }),
+  created_after: Type.String({
+    description:
+      "Cursor lower bound for event creation time (ISO-8601). Required for the first page.",
+    examples: ["2024-01-01T00:00:00.000Z"],
+  }),
+  after_id: Type.Integer({
+    minimum: 0,
+    default: 0,
+    description:
+      "Cursor id for pagination. Use the `cursor.id` from the previous response.",
+    examples: [0],
+  }),
+  limit: Type.Integer({
+    minimum: 1,
+    maximum: 100,
+    default: 50,
+    description: "Maximum number of events to return (max 100).",
+    examples: [50],
+  }),
 });
 
 const EventsCursorSchema = Type.Object({
-  createdAt: StringSchema,
+  createdAt: Type.String({
+    description: "Cursor ISO-8601 timestamp.",
+    examples: ["2024-01-01T00:00:00.000Z"],
+  }),
   id: Type.Integer({ minimum: 0 }),
 });
 
@@ -114,6 +200,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         querystring: OrdersQueryParamsSchema,
+        summary: "List orders",
+        description:
+          "Returns paginated orders with optional filters (chain, status, amount range, time range).",
+        tags: ["Orders"],
         response: {
           200: OrdersResponseSchema,
         },
@@ -172,6 +262,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     "/signatures",
     {
       schema: {
+        summary: "List relayable order signatures",
+        description:
+          "Returns orders that have reached the required oracle signature threshold along with their signatures.",
+        tags: ["Orders"],
         response: {
           200: RelayableSignaturesSchema,
         },
@@ -204,6 +298,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         querystring: EventsQueryParamsSchema,
+        summary: "List bridge events",
+        description:
+          "Cursor-based pagination over stored events. Use the returned cursor to request the next page.",
+        tags: ["Orders"],
         response: {
           200: EventsResponseSchema,
         },
@@ -234,6 +332,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         querystring: OrderByTrxHashQuerySchema,
+        summary: "Fetch order by origin transaction hash",
+        description:
+          "Returns the order that originated from the provided transaction hash.",
+        tags: ["Orders"],
         response: {
           200: OrderByTrxHashResponseSchema,
         },
@@ -255,6 +357,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     {
       schema: {
         body: EstimationBodySchema,
+        summary: "Estimate bridge fees",
+        description:
+          "Returns a fee estimation for the provided amount and destination.",
+        tags: ["Orders"],
         response: {
           200: EstimationResponseSchema,
         },
