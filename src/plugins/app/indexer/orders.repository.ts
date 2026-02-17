@@ -57,7 +57,6 @@ type OrderWithTotal = StoredOrder & { total: number };
 function normalizeStoredOrder(row: StoredOrder): StoredOrder {
   return {
     ...row,
-    oracle_accept_to_relay: Boolean(row.oracle_accept_to_relay),
     failure_reason_public: row.failure_reason_public ?? undefined,
   };
 }
@@ -82,7 +81,6 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_nonce",
           "source_payload",
           "failure_reason_public",
-          "oracle_accept_to_relay",
           "status"
         )
         .select(knex.raw("count(*) OVER() as total"));
@@ -158,7 +156,6 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_nonce",
           "source_payload",
           "failure_reason_public",
-          "oracle_accept_to_relay",
           "status"
         )
         .where("id", id)
@@ -180,7 +177,6 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_nonce",
           "source_payload",
           "failure_reason_public",
-          "oracle_accept_to_relay",
           "status"
         )
         .where("origin_trx_hash", hash)
@@ -285,7 +281,6 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "origin_trx_hash",
           "source_nonce",
           "source_payload",
-          "oracle_accept_to_relay",
           "status"
         )
         .whereIn("id", ids)

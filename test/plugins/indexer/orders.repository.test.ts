@@ -22,7 +22,6 @@ describe("ordersRepository", () => {
       amount: "123",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -33,7 +32,6 @@ describe("ordersRepository", () => {
     t.assert.strictEqual(created?.from, "Alice");
     t.assert.strictEqual(created?.to, "Bob");
     t.assert.strictEqual(created?.amount, "123");
-    t.assert.strictEqual(created?.oracle_accept_to_relay, false);
     t.assert.strictEqual(created?.status, "in-progress");
 
     const fetched = await repo.findById(created!.id);
@@ -62,7 +60,6 @@ describe("ordersRepository", () => {
       amount: "10",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -74,7 +71,6 @@ describe("ordersRepository", () => {
       amount: "20",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "finalized",
     });
     await repo.create({
@@ -86,7 +82,6 @@ describe("ordersRepository", () => {
       amount: "30",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -125,7 +120,6 @@ describe("ordersRepository", () => {
       amount: "1",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -137,7 +131,6 @@ describe("ordersRepository", () => {
       amount: "2",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "finalized",
     });
 
@@ -177,7 +170,6 @@ describe("ordersRepository", () => {
       amount: "50",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -219,7 +211,6 @@ describe("ordersRepository", () => {
       amount: "7",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "finalized",
     });
 
@@ -270,7 +261,6 @@ describe("ordersRepository", () => {
       amount: "5",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -305,7 +295,6 @@ describe("ordersRepository", () => {
       amount: "9",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
 
@@ -327,7 +316,6 @@ describe("ordersRepository", () => {
       amount: "1",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "pending",
     });
     const inProgress = await repo.create({
@@ -339,7 +327,6 @@ describe("ordersRepository", () => {
       amount: "2",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     });
     await repo.create({
@@ -351,7 +338,6 @@ describe("ordersRepository", () => {
       amount: "3",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "ready-for-relay",
     });
 
