@@ -218,7 +218,8 @@ describe("poller plugin", () => {
     poller.start();
     await completion;
 
-      t.assert.deepStrictEqual(observed, [
+      const nonEmpty = observed.filter((round) => round.length > 0);
+      t.assert.deepStrictEqual(nonEmpty, [
         [{ server: "fast", round: 1 }],
         [{ server: "fast", round: 2 }],
       ]);

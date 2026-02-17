@@ -166,7 +166,6 @@ test("GET /api/orders filters by created_after and created_before", async (t: Te
     origin_trx_hash: "tx",
     source_nonce: "n",
     source_payload: "{}",
-    oracle_accept_to_relay: false,
     status: "in-progress" as const,
   };
   await knex(ORDERS_TABLE_NAME).insert([
