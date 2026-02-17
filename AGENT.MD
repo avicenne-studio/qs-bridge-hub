@@ -15,7 +15,7 @@
 - **Indexer domain (`src/plugins/app/indexer`)** – encapsulates oracle order logic.
   - `orders.repository.ts` decorates Fastify with CRUD/pagination helpers that talk to SQLite via Knex; table is auto-created on startup (see `src/plugins/infra/knex.ts`).
   - `oracle-orders-reconciliation.ts` exposes `fastify.oracleOrdersReconciliatior.reconcile()` that enforces identical payloads across oracle reports and picks a consensus status (majority vote, rejects ties).
-  - Schemas under `schemas/` describe Qubic / Solana transactions and the normalized `OracleOrder` (string `amount`, string `relayerFee`, `source_nonce`, `source_payload`, boolean `oracle_accept_to_relay`). `normalizeBridgeInstruction` is the hook where Solana IX data should be decoded.
+  - Schemas under `schemas/` describe Qubic / Solana transactions and the normalized `OracleOrder` (string `amount`, string `relayerFee`, `source_nonce`, `source_payload`). `normalizeBridgeInstruction` is the hook where Solana IX data should be decoded.
 - **Solana WS listener (`src/plugins/app/listener/solana/ws-solana-listener.ts`)** – optional WebSocket listener (gated by `SOLANA_LISTENER_ENABLED`) that subscribes to Solana program logs for `qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H`, decodes outbound/override-outbound events, and persists them in the events repository.
 - **Events repository (`src/plugins/app/events/events.repository.ts`)** – persists decoded Solana events in SQLite with a uniqueness guard on `(signature, type, nonce)`.
 - **Routes (`src/routes`)** – home route returns a welcome banner; `/api` namespace holds resource-specific routers.
@@ -27,7 +27,7 @@
 ## Database
 - SQLite (via `better-sqlite3`) accessed through Knex. File path is set with `SQLITE_DB_FILE` in `.env`. Pool is limited to a single connection to keep locking predictable on embedded storage.
 - Bootstrapping: `src/plugins/infra/knex.ts` ensures three tables exist:
-  - `orders` with fields `{id, source, dest, from, to, amount, relayerFee, source_nonce, source_payload, oracle_accept_to_relay, status}` and default `status='in-progress'`.
+- `orders` with fields `{id, source, dest, from, to, amount, relayerFee, source_nonce, source_payload, status}` and default `status='in-progress'`.
   - `order_signatures` with `{id, order_id, signature}` and a unique `(order_id, signature)` constraint.
   - `events` with `{id, signature, slot, chain, type, nonce, payload, created_at}` and a unique `(signature, type, nonce)` constraint.
 - IDs are UUID strings; pagination calculates totals via a window function to keep API responses constant time.

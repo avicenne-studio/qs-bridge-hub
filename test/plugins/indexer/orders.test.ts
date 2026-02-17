@@ -16,7 +16,6 @@ describe("OracleOrder utilities", () => {
       amount: "10",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: false,
       status: "in-progress",
     };
 
@@ -32,7 +31,6 @@ describe("OracleOrder utilities", () => {
       amount: "1",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      oracle_accept_to_relay: true,
       status: "finalized",
     };
 

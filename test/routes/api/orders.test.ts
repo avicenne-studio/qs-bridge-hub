@@ -27,7 +27,6 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await ordersRepository.create({
@@ -41,7 +40,6 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: false,
     status: "finalized",
   });
 }
@@ -68,7 +66,6 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].from, "A");
   t.assert.strictEqual(body.data[0].dest, "qubic");
   t.assert.strictEqual(body.data[0].status, "in-progress");
-  t.assert.strictEqual(body.data[0].oracle_accept_to_relay, false);
 });
 
 test("GET /api/orders filters by status (multiple)", async (t: TestContext) => {
@@ -241,7 +238,6 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: true,
     status: "ready-for-relay",
   });
   const second = await ordersRepository.create({
@@ -255,7 +251,6 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: false,
     status: "in-progress",
   });
   await ordersRepository.create({
@@ -269,7 +264,6 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: false,
     status: "finalized",
   });
 

@@ -321,7 +321,8 @@ function startOrdersPolling(
 
           const signatureCounts =
             await ordersRepository.addSignatures(orderId, signatures);
-          const canBeRelayable = consensus.status !== "finalized";
+          const canBeRelayable =
+            consensus.status !== "finalized" && consensus.status !== "relayed";
           const meetsThreshold = signatureCounts.total >= requiredSignatures();
           const nextStatus =
             meetsThreshold && canBeRelayable

@@ -58,7 +58,6 @@ export default fp(
           table.string("source_nonce").notNullable();
           table.text("source_payload").notNullable();
           table.string("failure_reason_public").nullable();
-          table.boolean("oracle_accept_to_relay").notNullable().defaultTo(false);
           table.string("status").notNullable().defaultTo("in-progress");
           table
             .timestamp("created_at", { useTz: false })

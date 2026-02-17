@@ -15,6 +15,7 @@ export const OracleOrderStatus = Type.Union([
   Type.Literal("pending"),
   Type.Literal("in-progress"),
   Type.Literal("ready-for-relay"),
+  Type.Literal("relayed"),
   Type.Literal("failed"),
   Type.Literal("finalized"),
 ]);
@@ -30,7 +31,6 @@ export const OracleOrderSchema = Type.Object({
   source_nonce: StringSchema,
   source_payload: SourcePayloadSchema,
   failure_reason_public: Type.Optional(StringSchema),
-  oracle_accept_to_relay: Type.Boolean(),
   status: OracleOrderStatus,
 });
 

@@ -15,7 +15,6 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   amount: "10",
   relayerFee: "1",
   origin_trx_hash: "trx-hash",
-  oracle_accept_to_relay: false,
 };
 
 describe("oracleOrdersReconciliatior plugin", () => {
@@ -48,21 +47,6 @@ describe("oracleOrdersReconciliatior plugin", () => {
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
       { ...baseOrder, to: "C", status: "finalized" },
-    ];
-
-    t.assert.throws(() => reconciliator.reconcile(orders));
-  });
-
-  it("throws when relayable flags differ", async (t: TestContext) => {
-    const app = await build(t);
-    const reconciliator =
-      app.getDecorator<OracleOrdersReconciliatiorService>(
-        kOracleOrdersReconciliatior
-      );
-
-    const orders: OracleOrder[] = [
-      { ...baseOrder, status: "finalized" },
-      { ...baseOrder, oracle_accept_to_relay: true, status: "finalized" },
     ];
 
     t.assert.throws(() => reconciliator.reconcile(orders));

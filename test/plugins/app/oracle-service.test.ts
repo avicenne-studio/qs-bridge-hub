@@ -46,7 +46,6 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    oracle_accept_to_relay: false,
     status: "pending",
     ...overrides,
   } satisfies OracleOrderWithSignature;
@@ -480,7 +479,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -527,7 +525,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -543,7 +540,6 @@ describe("oracle service", () => {
 
       const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "ready-for-relay");
-      t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
     });
 
     test("computes required signature thresholds", (t: TestContext) => {
@@ -576,7 +572,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -593,7 +588,6 @@ describe("oracle service", () => {
 
       const updated = await ordersRepository.findById(created!.id);
       t.assert.strictEqual(updated?.status, "pending");
-      t.assert.strictEqual(updated?.oracle_accept_to_relay, false);
 
       const withSignatures = await ordersRepository.findByIdsWithSignatures([
         created!.id,
@@ -753,7 +747,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -840,7 +833,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
@@ -984,7 +976,6 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
-        oracle_accept_to_relay: false,
         status: "pending",
       });
 
