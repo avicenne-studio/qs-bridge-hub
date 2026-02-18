@@ -40,6 +40,7 @@ function startHub(hub) {
     env: {
       ...process.env,
       PORT: String(hub.port),
+      LOG_PRETTY: "true",
       SQLITE_DB_FILE: dbFile,
       ORACLE_URLS: DEFAULT_ORACLE_URLS,
       HUB_KEYS_FILE: FIXTURE_KEYS_FILE,
