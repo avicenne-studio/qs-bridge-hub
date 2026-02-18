@@ -29,11 +29,11 @@ export const OracleOrderSchema = Type.Object({
   relayerFee: AmountSchema,
   origin_trx_hash: Type.String({ minLength: 1, maxLength: 255 }),
   destination_trx_hash: Type.Optional(
-    Type.String({ minLength: 1, maxLength: 255 })
+    Type.String({ maxLength: 255 })
   ),
   source_nonce: StringSchema,
   source_payload: SourcePayloadSchema,
-  failure_reason_public: Type.Optional(StringSchema),
+  failure_reason_public: Type.Optional(Type.String({ maxLength: 255 })),
   status: OracleOrderStatus,
 });
 
