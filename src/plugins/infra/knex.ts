@@ -55,6 +55,7 @@ export default fp(
           table
             .string("origin_trx_hash", 255)
             .notNullable();
+          table.string("destination_trx_hash", 255).nullable();
           table.string("source_nonce").notNullable();
           table.text("source_payload").notNullable();
           table.string("failure_reason_public").nullable();

@@ -629,7 +629,11 @@ describe("oracle service", () => {
           serverOrderFactory("sig-2", "finalized"),
           serverOrderFactory("sig-3", "finalized"),
         ],
-        responsePayloads: [{ data: "nope" }, { data: "nope" }, { data: "nope" }],
+        responsePayloads: [
+          { data: ["nope"] },
+          { data: ["nope"] },
+          { data: ["nope"] },
+        ],
       });
 
       const app = await withApp(t);
@@ -650,6 +654,73 @@ describe("oracle service", () => {
       )!.arguments as [{ payloadType: string; payloadKeys: string[] }];
       t.assert.strictEqual(logPayload.payloadType, "object");
       t.assert.deepStrictEqual(logPayload.payloadKeys, ["data"]);
+
+      await handle.stop();
+    });
+
+    test("accepts payloads with extra fields", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized"),
+          serverOrderFactory("sig-2", "finalized"),
+          serverOrderFactory("sig-3", "finalized"),
+        ],
+        responsePayloads: [
+          {
+            data: [
+              {
+                ...orderBase({
+                  id: makeId(101),
+                  signature: "sig-1",
+                  status: "finalized",
+                }),
+                extra_field: "ignored",
+              },
+            ],
+          },
+          {
+            data: [
+              {
+                ...orderBase({
+                  id: makeId(101),
+                  signature: "sig-2",
+                  status: "finalized",
+                }),
+                oracle_accept_to_relay: true,
+              },
+            ],
+          },
+          {
+            data: [
+              {
+                ...orderBase({
+                  id: makeId(101),
+                  signature: "sig-3",
+                  status: "finalized",
+                }),
+                relay_attempts: 2,
+              },
+            ],
+          },
+        ],
+      });
+
+      const app = await withApp(t);
+      markOraclesHealthy(app, ORACLE_URLS);
+      const ordersRepository = getOrdersRepository(app);
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const stored = await ordersRepository.findById(makeId(101));
+        return stored?.status === "finalized";
+      });
+
+      const stored = await ordersRepository.findById(makeId(101));
+      t.assert.ok(stored, "expected order to be stored");
+      t.assert.strictEqual(stored?.status, "finalized");
+      t.assert.strictEqual(stored?.origin_trx_hash, "trx-hash");
 
       await handle.stop();
     });
