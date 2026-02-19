@@ -76,13 +76,44 @@ function selectConsensusValue<T extends string>(
   return winner;
 }
 
+function selectConsensusDestinationTrxHash(
+  orders: OracleOrder[]
+): string | undefined {
+  const hashes = orders
+    .map((o) => o.destination_trx_hash)
+    .filter((h): h is string => h != null && h.length > 0);
+
+  if (hashes.length === 0) return undefined;
+
+  const counts = new Map<string, number>();
+  for (const h of hashes) {
+    counts.set(h, (counts.get(h) ?? 0) + 1);
+  }
+
+  let best: string | undefined;
+  let highest = 0;
+  for (const [h, count] of counts) {
+    if (count > highest) {
+      highest = count;
+      best = h;
+    }
+  }
+
+  return best;
+}
+
 export default fp(
   function (fastify: FastifyInstance) {
     const reconcile: ReconcileFn = (orders) => {
       ensureIdenticalOrders(orders);
 
       const consensusStatus = selectConsensusStatus(orders);
-      return { ...orders[0], status: consensusStatus };
+      const consensusHash = selectConsensusDestinationTrxHash(orders);
+      return {
+        ...orders[0],
+        status: consensusStatus,
+        ...(consensusHash !== undefined && { destination_trx_hash: consensusHash }),
+      };
     };
 
     fastify.decorate(kOracleOrdersReconciliatior, {
