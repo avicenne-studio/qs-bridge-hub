@@ -479,6 +479,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 
@@ -525,6 +527,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 
@@ -572,6 +576,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 
@@ -818,6 +824,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 
@@ -904,6 +912,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 
@@ -919,6 +929,50 @@ describe("oracle service", () => {
       );
 
       await handle.stop();
+    });
+
+    test("propagates destination_trx_hash to hub during finalization", async (t: TestContext) => {
+      const txHash = "dest-tx-hash-abc123";
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "finalized", { destination_trx_hash: txHash }),
+          serverOrderFactory("sig-2", "finalized", { destination_trx_hash: txHash }),
+          serverOrderFactory("sig-3", "finalized", { destination_trx_hash: txHash }),
+        ],
+        orderIds: [makeId(180)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      await ordersRepository.create({
+        id: makeId(180),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        status: "relayed",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await ordersRepository.findById(makeId(180));
+        return updated?.status === "finalized" && updated?.destination_trx_hash === txHash;
+      }, 10_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(makeId(180));
+      t.assert.strictEqual(updated?.status, "finalized");
+      t.assert.strictEqual(updated?.destination_trx_hash, txHash);
     });
 
     test("creates missing orders when polling oracles", async (t: TestContext) => {
@@ -1047,6 +1101,8 @@ describe("oracle service", () => {
         amount: "10",
         relayerFee: "1",
         origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
         status: "pending",
       });
 

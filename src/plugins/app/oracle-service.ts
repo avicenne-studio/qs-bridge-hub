@@ -355,6 +355,9 @@ function startOrdersPolling(
 
           const updated = await ordersRepository.update(orderId, {
             status: nextStatus,
+            ...(consensus.destination_trx_hash && {
+              destination_trx_hash: consensus.destination_trx_hash,
+            }),
           });
 
           if (!updated) {
