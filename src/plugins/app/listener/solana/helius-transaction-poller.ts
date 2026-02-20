@@ -4,7 +4,7 @@ import type { AppConfig } from "../../../infra/env.js";
 import { kConfig } from "../../../infra/env.js";
 import type { EventsRepository } from "../../events/events.repository.js";
 import { kEventsRepository } from "../../events/events.repository.js";
-import { kPoller, type PollerService } from "../../../infra/poller.js";
+import { kPoller, type PollerService, sleep } from "../../../infra/poller.js";
 import {
   kUndiciClient,
   type UndiciClientService,
@@ -23,28 +23,46 @@ export type HeliusTransaction = {
   };
 };
 
+export type HeliusRpcResult = {
+  data: HeliusTransaction[];
+  paginationToken: string | null;
+};
+
 type HeliusRpcResponse = {
-  result?: { data?: HeliusTransaction[] };
+  result?: {
+    data?: HeliusTransaction[];
+    paginationToken?: string;
+  };
   error?: { message: string };
+};
+
+export type HeliusFetcherOptions = {
+  startTime: number;
+  endTime: number;
+  paginationToken?: string;
 };
 
 export type HeliusFetcher = (
   signal: AbortSignal,
-) => Promise<HeliusTransaction[]>;
+  options: HeliusFetcherOptions,
+) => Promise<HeliusRpcResult>;
 
 export const kHeliusFetcher = Symbol.for("heliusFetcher");
+
+const INTERVAL_MULTIPLIERS = [1, 2, 3] as const;
+const MAX_TIER = INTERVAL_MULTIPLIERS.length - 1;
+const OVERLAP_SECONDS = 60;
+const PAGE_RETRY_COUNT = 2;
 
 export function createDefaultHeliusFetcher(
   client: UndiciClient,
   rpcUrl: string,
-  lookbackSeconds: number,
 ): HeliusFetcher {
   const url = new URL(rpcUrl);
   const origin = url.origin;
   const path = url.pathname + url.search;
 
-  return async (signal: AbortSignal) => {
-    const now = Math.floor(Date.now() / 1000);
+  return async (signal, { startTime, endTime, paginationToken }) => {
     const body = {
       jsonrpc: "2.0",
       id: 1,
@@ -56,9 +74,10 @@ export function createDefaultHeliusFetcher(
           sortOrder: "asc",
           limit: 100,
           maxSupportedTransactionVersion: 0,
+          ...(paginationToken != null && { paginationToken }),
           filters: {
-            blockTime: { gte: now - lookbackSeconds, lte: now },
-            status: "succeeded", //TODO: In PROD we should wait for the transaction to be Finalized and do the same for the WebSocket implementation.
+            blockTime: { gte: startTime, lte: endTime },
+            status: "succeeded",
             tokenAccounts: "balanceChanged",
           },
         },
@@ -76,7 +95,10 @@ export function createDefaultHeliusFetcher(
       throw response.error;
     }
 
-    return response.result?.data ?? [];
+    return {
+      data: response.result?.data ?? [],
+      paginationToken: response.result?.paginationToken ?? null,
+    };
   };
 }
 
@@ -88,6 +110,39 @@ export function resolveHeliusFetcher(
     return instance.getDecorator<HeliusFetcher>(kHeliusFetcher);
   }
   return factory();
+}
+
+async function fetchPageWithRetry(
+  fetcher: HeliusFetcher,
+  timeoutMs: number,
+  retryDelayMs: number,
+  options: HeliusFetcherOptions,
+): Promise<HeliusRpcResult> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= PAGE_RETRY_COUNT; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetcher(controller.signal, options);
+    } catch (err) {
+      lastError = err;
+      if (attempt < PAGE_RETRY_COUNT) {
+        await sleep(retryDelayMs + Math.random() * retryDelayMs);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError;
+}
+
+function countProcessedEvents(
+  settled: PromiseSettledResult<number>[],
+): number {
+  return settled.reduce(
+    (sum, r) => sum + (r.status === "fulfilled" ? r.value : 0),
+    0,
+  );
 }
 
 export default fp(
@@ -113,11 +168,7 @@ export default fp(
 
     const client = undiciService.create();
     const fetcher = resolveHeliusFetcher(fastify, () =>
-      createDefaultHeliusFetcher(
-        client,
-        config.HELIUS_RPC_URL,
-        config.HELIUS_POLLER_LOOKBACK_SECONDS,
-      ),
+      createDefaultHeliusFetcher(client, config.HELIUS_RPC_URL),
     );
 
     const processTransaction = async (tx: HeliusTransaction) => {
@@ -141,36 +192,137 @@ export default fp(
       }
     };
 
-    const filterNewTransactions = async (transactions: HeliusTransaction[]) => {
+    const deduplicateAndProcess = async (
+      transactions: HeliusTransaction[],
+    ): Promise<number> => {
+      if (transactions.length === 0) return 0;
       const signatures = transactions.map((tx) => tx.signature);
       const existingSignatures =
         await eventsRepository.findExistingSignatures(signatures);
       const existingSet = new Set(existingSignatures);
-      return transactions.filter((tx) => !existingSet.has(tx.signature));
-    };
-
-    const processTransactions = async (transactions: HeliusTransaction[]) => {
-      const newTransactions = await filterNewTransactions(transactions);
-
-      if (newTransactions.length > 0) {
-        fastify.log.info(
-          { added: newTransactions.length, total: transactions.length },
-          "Helius poller fetched",
-        );
+      const newTx = transactions.filter(
+        (tx) => !existingSet.has(tx.signature),
+      );
+      if (newTx.length > 0) {
         await Promise.allSettled(
-          newTransactions.map((tx) => processTransaction(tx)),
+          newTx.map((tx) => processTransaction(tx)),
         );
       }
+      return newTx.length;
     };
 
-    const poller = pollerService.create<HeliusTransaction[]>({
+    let intervalTier = 0;
+    let lastSuccessEndTime: number | null = null;
+    let failedSince: number | null = null;
+
+    function currentIntervalMs(): number {
+      return (
+        config.HELIUS_POLLER_INTERVAL_MS * INTERVAL_MULTIPLIERS[intervalTier]
+      );
+    }
+
+    function computeTimeWindow(): { startTime: number; endTime: number } {
+      const now = Math.floor(Date.now() / 1000);
+
+      if (failedSince !== null && lastSuccessEndTime !== null) {
+        return {
+          startTime: lastSuccessEndTime - OVERLAP_SECONDS,
+          endTime: now,
+        };
+      }
+
+      const lookbackSeconds =
+        Math.floor(currentIntervalMs() / 1000) + OVERLAP_SECONDS;
+      return { startTime: now - lookbackSeconds, endTime: now };
+    }
+
+    function onRoundSucceeded(
+      endTime: number,
+      transactionCount: number,
+    ): void {
+      lastSuccessEndTime = endTime;
+      failedSince = null;
+      intervalTier =
+        transactionCount > 0 ? 0 : Math.min(intervalTier + 1, MAX_TIER);
+    }
+
+    function onRoundFailed(err: unknown): void {
+      if (failedSince === null) {
+        failedSince = Math.floor(Date.now() / 1000);
+      }
+      intervalTier = 0;
+      fastify.log.error({ err }, "Helius poller round failed");
+    }
+
+    function fetchPage(
+      timeWindow: HeliusFetcherOptions,
+    ): Promise<HeliusRpcResult> {
+      return fetchPageWithRetry(
+        fetcher,
+        config.HELIUS_POLLER_TIMEOUT_MS,
+        config.HELIUS_POLLER_RETRY_DELAY_MS,
+        timeWindow,
+      );
+    }
+
+    async function fetchPaginatedPages(
+      timeWindow: { startTime: number; endTime: number },
+    ): Promise<{ pendingWork: Promise<number>[]; totalTransactions: number }> {
+      const pendingWork: Promise<number>[] = [];
+      let totalTransactions = 0;
+
+      let page = await fetchPage(timeWindow);
+      totalTransactions += page.data.length;
+
+      while (page.paginationToken) {
+        pendingWork.push(deduplicateAndProcess(page.data));
+        try {
+          page = await fetchPage({
+            ...timeWindow,
+            paginationToken: page.paginationToken,
+          });
+          totalTransactions += page.data.length;
+        } catch (err) {
+          await Promise.allSettled(pendingWork);
+          throw err;
+        }
+      }
+
+      pendingWork.push(deduplicateAndProcess(page.data));
+      return { pendingWork, totalTransactions };
+    }
+
+    async function runRound(): Promise<void> {
+      const timeWindow = computeTimeWindow();
+      const { pendingWork, totalTransactions } =
+        await fetchPaginatedPages(timeWindow);
+
+      const newCount = countProcessedEvents(
+        await Promise.allSettled(pendingWork),
+      );
+
+      if (totalTransactions > 0) {
+        fastify.log.info(
+          { added: newCount, total: totalTransactions },
+          "Helius poller fetched",
+        );
+      }
+
+      onRoundSucceeded(timeWindow.endTime, totalTransactions);
+    }
+
+    const poller = pollerService.create<void>({
       servers: [config.HELIUS_RPC_URL],
-      fetchOne: (_server, signal) => fetcher(signal),
-      onRound: async ([transactions = []]) => {
-        await processTransactions(transactions);
+      fetchOne: async () => {
+        try {
+          await runRound();
+        } catch (err) {
+          onRoundFailed(err);
+        }
       },
-      intervalMs: config.HELIUS_POLLER_INTERVAL_MS,
-      requestTimeoutMs: config.HELIUS_POLLER_TIMEOUT_MS,
+      onRound: () => {},
+      intervalMs: () => currentIntervalMs(),
+      requestTimeoutMs: 0,
       jitterMs: pollerService.defaults.jitterMs,
     });
 

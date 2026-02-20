@@ -58,6 +58,7 @@ describe("helius poller plugin", () => {
         HELIUS_POLLER_INTERVAL_MS: 10,
         HELIUS_POLLER_LOOKBACK_SECONDS: 60,
         HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
         ORACLE_URLS: "",
       },
       decorators: {
@@ -67,20 +68,6 @@ describe("helius poller plugin", () => {
 
     return { app, eventsRepo };
   }
-
-  it("processes outbound event from Helius response", async (t: TestContext) => {
-    const { port } = await createHeliusServer(t, heliusJsonHandler([
-      createTransaction("sig-outbound", 500, [toLogLine(createEventBytes("outbound"))]),
-    ]));
-
-    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
-
-    await waitFor(() => eventsRepo.store.length >= 1);
-
-    assert.strictEqual(eventsRepo.store[0].signature, "sig-outbound");
-    assert.strictEqual(eventsRepo.store[0].slot, 500);
-    assert.strictEqual(eventsRepo.store[0].type, "outbound");
-  });
 
   it("processes outbound, override-outbound and inbound events", async (t: TestContext) => {
     const { port } = await createHeliusServer(t, heliusJsonHandler([
@@ -94,9 +81,21 @@ describe("helius poller plugin", () => {
     await waitFor(() => eventsRepo.store.length >= 3);
 
     assert.strictEqual(eventsRepo.store.length, 3);
-    assert.ok(eventsRepo.store.some((e) => e.type === "outbound" && e.signature === "sig-1"));
-    assert.ok(eventsRepo.store.some((e) => e.type === "override-outbound" && e.signature === "sig-2"));
-    assert.ok(eventsRepo.store.some((e) => e.type === "inbound" && e.signature === "sig-3"));
+
+    const outbound = eventsRepo.store.find((e) => e.signature === "sig-1");
+    assert.ok(outbound);
+    assert.strictEqual(outbound.type, "outbound");
+    assert.strictEqual(outbound.slot, 100);
+
+    const override = eventsRepo.store.find((e) => e.signature === "sig-2");
+    assert.ok(override);
+    assert.strictEqual(override.type, "override-outbound");
+    assert.strictEqual(override.slot, 200);
+
+    const inbound = eventsRepo.store.find((e) => e.signature === "sig-3");
+    assert.ok(inbound);
+    assert.strictEqual(inbound.type, "inbound");
+    assert.strictEqual(inbound.slot, 300);
   });
 
   it("skips transactions with meta.err", async (t: TestContext) => {
@@ -220,7 +219,9 @@ describe("helius poller plugin", () => {
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    await waitFor(() => eventsRepo.store.some((e) => e.signature === "sig-after-error"));
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-after-error"),
+    );
 
     assert.ok(requestCount >= 2, "server should have received at least 2 requests");
   });
@@ -243,7 +244,9 @@ describe("helius poller plugin", () => {
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    await waitFor(() => eventsRepo.store.some((e) => e.signature === "sig-after-rpc-error"));
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-after-rpc-error"),
+    );
 
     assert.ok(requestCount >= 2, "server should have received at least 2 requests");
   });
@@ -262,11 +265,15 @@ describe("helius poller plugin", () => {
         HELIUS_POLLER_INTERVAL_MS: 10,
         HELIUS_POLLER_LOOKBACK_SECONDS: 60,
         HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
         ORACLE_URLS: "",
       },
       decorators: {
         [kEventsRepository]: eventsRepo,
-        [kHeliusFetcher]: async () => customTransactions,
+        [kHeliusFetcher]: async () => ({
+          data: customTransactions,
+          paginationToken: null,
+        }),
       },
     });
 
@@ -274,5 +281,167 @@ describe("helius poller plugin", () => {
 
     assert.strictEqual(eventsRepo.store.length, 1);
     assert.strictEqual(eventsRepo.store[0].signature, "custom-sig");
+  });
+
+  it("processes transactions across paginated responses", async (t: TestContext) => {
+    const { port } = await createHeliusServer(t, (req, res) => {
+      let body = "";
+      req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+      req.on("end", () => {
+        const parsed = JSON.parse(body);
+        const token = parsed.params?.[1]?.paginationToken;
+
+        res.writeHead(200, { "content-type": "application/json" });
+
+        if (!token) {
+          res.end(JSON.stringify({
+            result: {
+              data: [createTransaction("sig-page1", 100, [toLogLine(createEventBytes("outbound"))])],
+              paginationToken: "page2",
+            },
+          }));
+        } else if (token === "page2") {
+          res.end(JSON.stringify({
+            result: {
+              data: [createTransaction("sig-page2", 200, [toLogLine(createEventBytes("inbound"))])],
+            },
+          }));
+        }
+      });
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 2);
+
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-page1" && e.type === "outbound"));
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-page2" && e.type === "inbound"));
+  });
+
+  it("survives a database error during processing", async (t: TestContext) => {
+    const eventsRepo = createInMemoryEventsRepository();
+    let findCalls = 0;
+    const origFind = eventsRepo.findExistingSignatures.bind(eventsRepo);
+    eventsRepo.findExistingSignatures = async (sigs: string[]) => {
+      findCalls++;
+      if (findCalls === 1) throw new Error("db transient error");
+      return origFind(sigs);
+    };
+
+    await build(t, {
+      useMocks: false,
+      config: {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: "http://unused",
+        HELIUS_POLLER_INTERVAL_MS: 10,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kHeliusFetcher]: async () => ({
+          data: [createTransaction("sig-db-err", 100, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
+        }),
+      },
+    });
+
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-db-err"),
+    );
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-db-err"));
+  });
+
+  it("uses catch-up window after a fully failed round", async (t: TestContext) => {
+    let callCount = 0;
+    const eventsRepo = createInMemoryEventsRepository();
+
+    await build(t, {
+      useMocks: false,
+      config: {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: "http://unused",
+        HELIUS_POLLER_INTERVAL_MS: 10,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kHeliusFetcher]: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              data: [createTransaction("sig-r1", 100, [toLogLine(createEventBytes("outbound"))])],
+              paginationToken: null,
+            };
+          }
+          if (callCount >= 2 && callCount <= 4) {
+            throw new Error("transient failure");
+          }
+          return {
+            data: [createTransaction("sig-catchup", 200, [toLogLine(createEventBytes("outbound"))])],
+            paginationToken: null,
+          };
+        },
+      },
+    });
+
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-catchup"),
+    );
+
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-r1"));
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-catchup"));
+  });
+
+  it("handles pagination failure after first page is processed", async (t: TestContext) => {
+    let callCount = 0;
+    const eventsRepo = createInMemoryEventsRepository();
+
+    await build(t, {
+      useMocks: false,
+      config: {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: "http://unused",
+        HELIUS_POLLER_INTERVAL_MS: 10,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kHeliusFetcher]: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              data: [createTransaction("sig-partial", 100, [toLogLine(createEventBytes("outbound"))])],
+              paginationToken: "page2",
+            };
+          }
+          if (callCount >= 2 && callCount <= 4) {
+            throw new Error("page2 failed");
+          }
+          return {
+            data: [createTransaction("sig-after-partial", 200, [toLogLine(createEventBytes("outbound"))])],
+            paginationToken: null,
+          };
+        },
+      },
+    });
+
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-after-partial"),
+    );
+
+    assert.ok(
+      eventsRepo.store.some((e) => e.signature === "sig-partial"),
+      "page 1 should be processed even though page 2 failed",
+    );
+    assert.ok(eventsRepo.store.some((e) => e.signature === "sig-after-partial"));
   });
 });

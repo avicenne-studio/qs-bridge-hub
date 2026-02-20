@@ -8,7 +8,7 @@ export type Fetcher<TResponse> = (
 ) => Promise<TResponse>;
 
 export type PollerOptions = {
-  intervalMs: number;
+  intervalMs: number | (() => number);
   requestTimeoutMs: number;
   jitterMs?: number;
 };
@@ -43,9 +43,21 @@ export type PollerService = {
 
 export const kPoller = Symbol("infra.poller");
 
-function sleep(ms: number) {
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -53,6 +65,9 @@ async function withTimeout<T>(
   timeoutMs: number,
   fn: (signal: AbortSignal) => Promise<T>
 ) {
+  if (timeoutMs <= 0) {
+    return fn(new AbortController().signal);
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -60,6 +75,10 @@ async function withTimeout<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function resolveInterval(intervalMs: number | (() => number)): number {
+  return typeof intervalMs === "function" ? intervalMs() : intervalMs;
 }
 
 function createPoller<TResponse>(
@@ -70,6 +89,7 @@ function createPoller<TResponse>(
 
   let runningPromise: Promise<void> | null = null;
   let shouldRun = false;
+  const lifecycle = new AbortController();
 
   async function loop() {
     let round = 0;
@@ -79,7 +99,8 @@ function createPoller<TResponse>(
 
       if (jitterMs && jitterMs > 0) {
         const delay = Math.floor(Math.random() * (jitterMs + 1));
-        await sleep(delay);
+        await abortableSleep(delay, lifecycle.signal);
+        if (!shouldRun) break;
       }
 
       const settled = await Promise.allSettled(
@@ -93,8 +114,6 @@ function createPoller<TResponse>(
         if (result.status === "fulfilled") {
           success.push(result.value);
         }
-        // Promise.all rethrows on first failure. Promise.allSettled lets us
-        // keep the successes even when some servers fail or time out.
       }
 
       await onRound(success, {
@@ -104,9 +123,10 @@ function createPoller<TResponse>(
       });
 
       const elapsed = Date.now() - startedAt;
-      const waitFor = Math.max(0, intervalMs - elapsed);
-      if (waitFor > 0) {
-        await sleep(waitFor);
+      const interval = resolveInterval(intervalMs);
+      const waitFor = Math.max(0, interval - elapsed);
+      if (waitFor > 0 && shouldRun) {
+        await abortableSleep(waitFor, lifecycle.signal);
       }
     }
   }
@@ -128,6 +148,7 @@ function createPoller<TResponse>(
         return;
       }
       shouldRun = false;
+      lifecycle.abort();
       try {
         await runningPromise;
       } finally {
