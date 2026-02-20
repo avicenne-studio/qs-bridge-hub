@@ -53,7 +53,6 @@ describe("poller plugin", () => {
         pollResults.push(responses);
 
         if (context.round === 2) {
-          // Do not await stop inside onRound. Stop after onRound returns.
           queueMicrotask(() => {
             poller.stop().then(() => done?.(), noop);
           });
@@ -227,4 +226,31 @@ describe("poller plugin", () => {
       await client.close();
     }
   );
+
+  it("exits jitter sleep immediately when stopped", async (t: TestContext) => {
+    const app = await build(t, { useMocks: false });
+    const pollerService = app.getDecorator<PollerService>(kPoller);
+
+    let done: (() => void) | null = null;
+    const completion = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+
+    const start = Date.now();
+    const poller = pollerService.create({
+      servers: ["s1"],
+      fetchOne: async () => "ok",
+      onRound: noop,
+      intervalMs: 1,
+      requestTimeoutMs: 10,
+      jitterMs: 999_999_999,
+    });
+
+    poller.start();
+    setTimeout(() => poller.stop().then(() => done?.(), noop), 20);
+    await completion;
+
+    t.assert.ok(Date.now() - start < 500, "should exit quickly, not wait for full jitter");
+    t.assert.strictEqual(poller.isRunning(), false);
+  });
 });
