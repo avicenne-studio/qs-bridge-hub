@@ -151,6 +151,7 @@ export default fp(
           newEvents.map((event) => handleQubicEvent(event)),
         );
       },
+      logger: fastify.log,
       intervalMs: config.QUBIC_POLLER_INTERVAL_MS,
       requestTimeoutMs: config.QUBIC_POLLER_TIMEOUT_MS,
       jitterMs: pollerService.defaults.jitterMs,

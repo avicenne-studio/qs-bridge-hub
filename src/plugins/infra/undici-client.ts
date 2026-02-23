@@ -64,18 +64,26 @@ export class UndiciClient {
     signal?: AbortSignal,
     headers?: Record<string, string>
   ): Promise<T> {
-    const res = await request(`${origin}${path}`, {
+    const url = `${origin}${path}`;
+    const res = await request(url, {
       method: "GET",
       dispatcher: this.poolFor(origin),
       signal,
       headers: { ...this.opts.headers, ...(headers ?? {}) },
     });
 
+    const payload = await parseBody(res);
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`HTTP ${res.statusCode}`);
+      throw new HttpError({
+        message: `HTTP ${res.statusCode}`,
+        statusCode: res.statusCode,
+        url,
+        method: "GET",
+        body: payload,
+      });
     }
 
-    return (await res.body.json()) as T;
+    return payload as T;
   }
 
   async postJson<T>(
@@ -85,7 +93,8 @@ export class UndiciClient {
     signal?: AbortSignal,
     headers?: Record<string, string>
   ): Promise<T> {
-    const res = await request(`${origin}${path}`, {
+    const url = `${origin}${path}`;
+    const res = await request(url, {
       method: "POST",
       dispatcher: this.poolFor(origin),
       signal,
@@ -97,11 +106,18 @@ export class UndiciClient {
       body: JSON.stringify(body),
     });
 
+    const payload = await parseBody(res);
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`HTTP ${res.statusCode}`);
+      throw new HttpError({
+        message: `HTTP ${res.statusCode}`,
+        statusCode: res.statusCode,
+        url,
+        method: "POST",
+        body: payload,
+      });
     }
 
-    return (await res.body.json()) as T;
+    return payload as T;
   }
 
   async close(): Promise<void> {
@@ -117,6 +133,46 @@ export type UndiciClientService = {
 };
 
 export const kUndiciClient = Symbol("infra.undiciClient");
+
+export class HttpError extends Error {
+  readonly statusCode: number;
+  readonly url: string;
+  readonly method: string;
+  readonly body: unknown;
+
+  constructor(opts: {
+    message: string;
+    statusCode: number;
+    url: string;
+    method: string;
+    body: unknown;
+  }) {
+    super(opts.message);
+    this.name = "HttpError";
+    this.statusCode = opts.statusCode;
+    this.url = opts.url;
+    this.method = opts.method;
+    this.body = opts.body;
+  }
+}
+
+async function parseBody(res: Awaited<ReturnType<typeof request>>) {
+  const contentType = res.headers["content-type"] ?? "";
+  const isJson =
+    typeof contentType === "string" && contentType.includes("json");
+  const text = await res.body.text();
+  if (!text) {
+    return null;
+  }
+  if (!isJson) {
+    return text;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 export default fp(
   function undiciClientPlugin(fastify: FastifyInstance) {

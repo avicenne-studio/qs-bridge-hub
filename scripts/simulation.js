@@ -49,7 +49,6 @@ function startHub(hub) {
       SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ?? DEFAULT_SOLANA_RPC_URL,
       TOKEN_MINT: process.env.TOKEN_MINT ?? DEFAULT_TOKEN_MINT,
       QUBIC_RPC_URL: process.env.QUBIC_RPC_URL ?? DEFAULT_QUBIC_RPC_URL,
-      SOLANA_LISTENER_ENABLED: "true",
     },
   });
 

@@ -132,7 +132,7 @@ const schema = {
     },
     HELIUS_POLLER_LOOKBACK_SECONDS: {
       type: 'number',
-      minimum: 60,
+      minimum: 3,
       default: 600
     },
     HELIUS_POLLER_TIMEOUT_MS: {

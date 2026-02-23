@@ -152,6 +152,31 @@ describe("helius poller plugin", () => {
     assert.strictEqual(eventsRepo.store.length, 0);
   });
 
+  it("recovers after helius error responses", async (t: TestContext) => {
+    let requestCount = 0;
+    const { port } = await createHeliusServer(t, (_req, res) => {
+      requestCount++;
+      res.writeHead(200, { "content-type": "application/json" });
+      if (requestCount === 1) {
+        res.end(JSON.stringify({ error: {} }));
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          result: {
+            data: [createTransaction("sig-recover", 100, [toLogLine(createEventBytes("outbound"))])],
+          },
+        })
+      );
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    assert.strictEqual(eventsRepo.store[0].signature, "sig-recover");
+  });
+
   it("skips undecoded log entries", async (t: TestContext) => {
     const invalidLog = "Program data: " + Buffer.from(new Uint8Array([255, 1, 2])).toString("base64");
     const { port } = await createHeliusServer(t, heliusJsonHandler([
