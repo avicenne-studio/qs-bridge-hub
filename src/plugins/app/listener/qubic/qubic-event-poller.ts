@@ -77,7 +77,8 @@ export function createDefaultQubicEventFetcher(
 ): QubicEventFetcher {
   const url = new URL(rpcUrl);
   const origin = url.origin;
-  const path = url.pathname + url.search;
+  const basePath = url.pathname.replace(/\/+$/, "");
+  const path = `${basePath}/events${url.search}`;
 
   return async (signal: AbortSignal) => {
     return client.getJson<QubicEventsPayload>(origin, path, signal).then(
