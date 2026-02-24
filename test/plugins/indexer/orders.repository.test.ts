@@ -318,7 +318,7 @@ describe("ordersRepository", () => {
       origin_trx_hash: "trx-hash",
       status: "pending",
     });
-    const inProgress = await repo.create({
+    const readyForRelay = await repo.create({
       id: makeId(91),
       source: "solana",
       dest: "qubic",
@@ -327,7 +327,7 @@ describe("ordersRepository", () => {
       amount: "2",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "pending",
+      status: "ready-for-relay",
     });
     await repo.create({
       id: makeId(92),
@@ -338,10 +338,10 @@ describe("ordersRepository", () => {
       amount: "3",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "ready-for-relay",
+      status: "relayed",
     });
 
-    const expectedActiveIds = [pending!.id, inProgress!.id].sort();
+    const expectedActiveIds = [pending!.id, readyForRelay!.id, makeId(92)].sort();
     const activeIds = await repo.findActivesIds();
     t.assert.deepStrictEqual(activeIds, expectedActiveIds);
 
