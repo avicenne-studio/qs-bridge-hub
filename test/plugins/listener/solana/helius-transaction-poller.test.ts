@@ -22,7 +22,7 @@ function createTransaction(
   logMessages: string[] | null,
   err: unknown = null
 ): HeliusTransaction {
-  return { signature, slot, meta: { err, logMessages } };
+  return { transaction: { signatures: [signature] }, slot, meta: { err, logMessages } };
 }
 
 function heliusJsonHandler(data: HeliusTransaction[]): RequestListener {

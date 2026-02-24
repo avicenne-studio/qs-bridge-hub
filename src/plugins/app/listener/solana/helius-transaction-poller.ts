@@ -16,7 +16,9 @@ import { logLinesToEvents, decodeEventBytes } from "./solana-program-logs.js";
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../../../../clients/js/programs/qsBridge.js";
 
 export type HeliusTransaction = {
-  signature: string;
+  transaction: {
+    signatures: string[];
+  };
   slot: number;
   meta: {
     err: unknown | null;
@@ -48,6 +50,10 @@ export type HeliusFetcher = (
   options: HeliusFetcherOptions,
 ) => Promise<HeliusRpcResult>;
 
+export function txSignature(tx: HeliusTransaction): string {
+  return tx.transaction.signatures[0];
+}
+
 export const kHeliusFetcher = Symbol.for("heliusFetcher");
 
 const INTERVAL_MULTIPLIERS = [1, 2, 3] as const;
@@ -76,6 +82,7 @@ export function createDefaultHeliusFetcher(
           sortOrder: "asc",
           limit: 100,
           maxSupportedTransactionVersion: 0,
+          commitment: "confirmed",
           ...(paginationToken != null && { paginationToken }),
           filters: {
             blockTime: { gte: startTime, lte: endTime },
@@ -185,7 +192,7 @@ export default fp(
       const decodedEvents = logLinesToEvents(tx.meta.logMessages).map(
         decodeEventBytes,
       );
-      const txMeta = { signature: tx.signature, slot: tx.slot };
+      const txMeta = { signature: txSignature(tx), slot: tx.slot };
 
       for (const decoded of decodedEvents) {
         if (!decoded) continue;
@@ -204,12 +211,12 @@ export default fp(
       transactions: HeliusTransaction[],
     ): Promise<number> => {
       if (transactions.length === 0) return 0;
-      const signatures = transactions.map((tx) => tx.signature);
+      const signatures = transactions.map(txSignature);
       const existingSignatures =
         await eventsRepository.findExistingSignatures(signatures);
       const existingSet = new Set(existingSignatures);
       const newTx = transactions.filter(
-        (tx) => !existingSet.has(tx.signature),
+        (tx) => !existingSet.has(txSignature(tx)),
       );
       if (newTx.length > 0) {
         await Promise.allSettled(
