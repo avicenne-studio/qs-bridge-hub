@@ -4,7 +4,11 @@ import type { AppConfig } from "../../../infra/env.js";
 import { kConfig } from "../../../infra/env.js";
 import type { EventsRepository } from "../../events/events.repository.js";
 import { kEventsRepository } from "../../events/events.repository.js";
-import { kPoller, type PollerService, sleep } from "../../../infra/poller.js";
+import { kPoller, type PollerService } from "../../../infra/poller.js";
+import {
+  kExponentialBackoff,
+  type ExponentialBackoffService,
+} from "../../../infra/exponential-backoff.js";
 import {
   kUndiciClient,
   type UndiciClientService,
@@ -59,7 +63,6 @@ export const kHeliusFetcher = Symbol.for("heliusFetcher");
 const INTERVAL_MULTIPLIERS = [1, 2, 3] as const;
 const MAX_TIER = INTERVAL_MULTIPLIERS.length - 1;
 const OVERLAP_SECONDS = 60;
-const PAGE_RETRY_COUNT = 2;
 
 export function createDefaultHeliusFetcher(
   client: UndiciClient,
@@ -127,30 +130,6 @@ export function resolveHeliusFetcher(
   return factory();
 }
 
-async function fetchPageWithRetry(
-  fetcher: HeliusFetcher,
-  timeoutMs: number,
-  retryDelayMs: number,
-  options: HeliusFetcherOptions,
-): Promise<HeliusRpcResult> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= PAGE_RETRY_COUNT; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      return await fetcher(controller.signal, options);
-    } catch (err) {
-      lastError = err;
-      if (attempt < PAGE_RETRY_COUNT) {
-        await sleep(retryDelayMs + Math.random() * retryDelayMs);
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-  throw lastError;
-}
-
 function countProcessedEvents(
   settled: PromiseSettledResult<number>[],
 ): number {
@@ -174,6 +153,8 @@ export default fp(
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
     const undiciService =
       fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    const { withBackoff } =
+      fastify.getDecorator<ExponentialBackoffService>(kExponentialBackoff);
 
     const {
       handleOutboundEvent,
@@ -215,15 +196,23 @@ export default fp(
       const existingSignatures =
         await eventsRepository.findExistingSignatures(signatures);
       const existingSet = new Set(existingSignatures);
-      const newTx = transactions.filter(
+      const newTransactions = transactions.filter(
         (tx) => !existingSet.has(txSignature(tx)),
       );
-      if (newTx.length > 0) {
-        await Promise.allSettled(
-          newTx.map((tx) => processTransaction(tx)),
+      if (newTransactions.length > 0) {
+        const settled = await Promise.allSettled(
+          newTransactions.map((tx) => processTransaction(tx)),
         );
+        settled.forEach((result, index) => {
+          if (result.status === "rejected") {
+            fastify.log.error(
+              { error: result.reason, signature: txSignature(newTransactions[index]) },
+              "Error processing transaction from Helius poller",
+            );
+          }
+        });
       }
-      return newTx.length;
+      return newTransactions.length;
     };
 
     let intervalTier = 0;
@@ -272,11 +261,13 @@ export default fp(
     function fetchPage(
       timeWindow: HeliusFetcherOptions,
     ): Promise<HeliusRpcResult> {
-      return fetchPageWithRetry(
-        fetcher,
-        config.HELIUS_POLLER_TIMEOUT_MS,
-        config.HELIUS_POLLER_RETRY_DELAY_MS,
-        timeWindow,
+      return withBackoff(
+        (signal) => fetcher(signal, timeWindow),
+        {
+          maxRetries: 2,
+          baseDelayMs: config.HELIUS_POLLER_RETRY_DELAY_MS,
+          timeoutMs: config.HELIUS_POLLER_TIMEOUT_MS,
+        },
       );
     }
 
@@ -348,6 +339,6 @@ export default fp(
   },
   {
     name: "helius-transaction-poller",
-    dependencies: ["env", "events-repository", "polling", "undici-client"],
+    dependencies: ["env", "events-repository", "polling", "undici-client", "exponential-backoff"],
   },
 );

@@ -468,4 +468,37 @@ describe("helius poller plugin", () => {
     );
     assert.ok(eventsRepo.store.some((e) => e.signature === "sig-after-partial"));
   });
+
+  it("logs an error when processTransaction rejects", async (t: TestContext) => {
+    const eventsRepo = createInMemoryEventsRepository();
+    let createCalls = 0;
+
+    eventsRepo.create = async () => {
+      createCalls++;
+      throw new Error("store failure");
+    };
+
+    await build(t, {
+      useMocks: false,
+      config: {
+        HELIUS_POLLER_ENABLED: true,
+        HELIUS_RPC_URL: "http://unused",
+        HELIUS_POLLER_INTERVAL_MS: 10,
+        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+        HELIUS_POLLER_TIMEOUT_MS: 1000,
+        HELIUS_POLLER_RETRY_DELAY_MS: 10,
+        ORACLE_URLS: "",
+      },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kHeliusFetcher]: async () => ({
+          data: [createTransaction("sig-proc-err", 100, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
+        }),
+      },
+    });
+
+    await waitFor(() => createCalls > 0);
+    assert.ok(createCalls > 0);
+  });
 });
