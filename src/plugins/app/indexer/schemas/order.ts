@@ -13,7 +13,6 @@ export const OracleChain = Type.Union([
 
 export const OracleOrderStatus = Type.Union([
   Type.Literal("pending"),
-  Type.Literal("in-progress"),
   Type.Literal("ready-for-relay"),
   Type.Literal("relayed"),
   Type.Literal("failed"),

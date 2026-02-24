@@ -16,7 +16,7 @@ describe("OracleOrder utilities", () => {
       amount: "10",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     };
 
     t.assert.doesNotThrow(() => assertValidOracleOrder(order));
