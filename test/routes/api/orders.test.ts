@@ -197,8 +197,7 @@ test("GET /api/orders/trx-hash returns order by transaction hash", async (t: Tes
 
   const res = await app.inject({
     method: "GET",
-    url: "/api/orders/trx-hash",
-    query: { hash: "trx-hash" },
+    url: "/api/orders/trx-hash/trx-hash",
   });
 
   t.assert.strictEqual(res.statusCode, 200);
@@ -213,8 +212,7 @@ test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: Tes
 
   const res = await app.inject({
     method: "GET",
-    url: "/api/orders/trx-hash",
-    query: { hash: "missing" },
+    url: "/api/orders/trx-hash/missing",
   });
 
   t.assert.strictEqual(res.statusCode, 404);
