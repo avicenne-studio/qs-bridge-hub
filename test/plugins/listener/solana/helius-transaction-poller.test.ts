@@ -2,7 +2,6 @@ import { describe, it, TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { AddressInfo } from "node:net";
 import type { RequestListener } from "node:http";
-import { Buffer } from "node:buffer";
 import {
   type HeliusTransaction,
   kHeliusFetcher,
@@ -44,24 +43,35 @@ async function createHeliusServer(
 }
 
 describe("helius poller plugin", () => {
+  const BASE_CONFIG = {
+    HELIUS_POLLER_ENABLED: true,
+    HELIUS_POLLER_INTERVAL_MS: 10,
+    HELIUS_POLLER_LOOKBACK_SECONDS: 60,
+    HELIUS_POLLER_TIMEOUT_MS: 1000,
+    ORACLE_URLS: "",
+  };
+
   async function buildApp(
     t: TestContext,
     heliusUrl: string,
     eventsRepo = createInMemoryEventsRepository(),
-    opts: { enabled?: boolean } = {},
+    opts: {
+      enabled?: boolean;
+      decorators?: Record<PropertyKey, unknown>;
+      config?: Partial<typeof BASE_CONFIG> & { HELIUS_RPC_URL?: string };
+    } = {},
   ) {
     const app = await build(t, {
       useMocks: false,
       config: {
-        HELIUS_POLLER_ENABLED: opts.enabled ?? true,
-        HELIUS_RPC_URL: heliusUrl,
-        HELIUS_POLLER_INTERVAL_MS: 10,
-        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
-        HELIUS_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
+        ...BASE_CONFIG,
+        ...opts.config,
+        HELIUS_POLLER_ENABLED: opts.enabled ?? BASE_CONFIG.HELIUS_POLLER_ENABLED,
+        HELIUS_RPC_URL: opts.config?.HELIUS_RPC_URL ?? heliusUrl,
       },
       decorators: {
         [kEventsRepository]: eventsRepo,
+        ...(opts.decorators ?? {}),
       },
     });
 
@@ -178,7 +188,7 @@ describe("helius poller plugin", () => {
   });
 
   it("skips undecoded log entries", async (t: TestContext) => {
-    const invalidLog = "Program data: " + Buffer.from(new Uint8Array([255, 1, 2])).toString("base64");
+    const invalidLog = toLogLine(new Uint8Array([255, 1, 2]));
     const { port } = await createHeliusServer(t, heliusJsonHandler([
       createTransaction("sig-invalid", 100, [invalidLog, toLogLine(createEventBytes("outbound"))]),
     ]));
@@ -279,18 +289,8 @@ describe("helius poller plugin", () => {
     ];
 
     const eventsRepo = createInMemoryEventsRepository();
-    await build(t, {
-      useMocks: false,
-      config: {
-        HELIUS_POLLER_ENABLED: true,
-        HELIUS_RPC_URL: "http://unused",
-        HELIUS_POLLER_INTERVAL_MS: 10,
-        HELIUS_POLLER_LOOKBACK_SECONDS: 60,
-        HELIUS_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
-      },
+    await buildApp(t, "http://unused", eventsRepo, {
       decorators: {
-        [kEventsRepository]: eventsRepo,
         [kHeliusFetcher]: async () => customTransactions,
       },
     });

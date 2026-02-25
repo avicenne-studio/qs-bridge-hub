@@ -1,6 +1,5 @@
 import { describe, it, TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
 import fastify from "fastify";
 import fp from "fastify-plugin";
 import {
@@ -22,7 +21,9 @@ import {
   createOutboundEventBytes,
   createOverrideEventBytes,
   createInboundEventBytes,
+  toLogLine,
 } from "../../../helpers/solana-events.js";
+import { mockLogMethod } from "../../../helpers/mocks/logger.js";
 import { MockWebSocket } from "../../../helpers/listener/ws-mock.js";
 import { build } from "../../../helpers/build.js";
 
@@ -183,14 +184,14 @@ describe("ws solana listener plugin", () => {
       t,
       eventsRepository: repo,
     });
-    const { mock: logMock } = t.mock.method(app.log, "error");
+    const logMock = mockLogMethod(t, app.log, "error");
 
     ws.emit("open", {});
 
-    const outboundBytes = createOutboundEventBytes();
-    const payload = createLogsNotification([
-      `Program data: ${Buffer.from(outboundBytes).toString("base64")}`,
-    ], "sig-queue");
+    const payload = createLogsNotification(
+      [toLogLine(createOutboundEventBytes())],
+      "sig-queue"
+    );
     ws.emit("message", { data: payload });
 
     await waitFor(() => {
@@ -228,13 +229,11 @@ describe("ws solana listener plugin", () => {
 
     ws.emit("open", {});
 
-    const outboundBytes = createOutboundEventBytes();
-    const overrideBytes = createOverrideEventBytes();
     const payload = createLogsNotification([
-      `Program data: ${Buffer.from(outboundBytes).toString("base64")}`,
-      `Program data: ${Buffer.from(overrideBytes).toString("base64")}`,
-      `Program data: ${Buffer.from(new Uint8Array(12)).toString("base64")}`,
-      `Program data: ${Buffer.from(new Uint8Array(12)).toString("base64")}`,
+      toLogLine(createOutboundEventBytes()),
+      toLogLine(createOverrideEventBytes()),
+      toLogLine(new Uint8Array(12)),
+      toLogLine(new Uint8Array(12)),
     ], "sig-process", 99);
 
     ws.emit("message", { data: payload });
@@ -270,11 +269,8 @@ describe("ws solana listener plugin", () => {
 
     ws.emit("open", {});
 
-    const inboundBytes = createInboundEventBytes();
     const payload = createLogsNotification(
-      [
-        `Program data: ${Buffer.from(inboundBytes).toString("base64")}`,
-      ],
+      [toLogLine(createInboundEventBytes())],
       "sig-inbound",
       42
     );
@@ -293,12 +289,11 @@ describe("ws solana listener plugin", () => {
 
   it("logs missing signature and skips storage", async (t) => {
     const { app, ws, eventsRepository } = await buildListenerApp({ t });
-    const { mock: warnMock } = t.mock.method(app.log, "warn");
+    const warnMock = mockLogMethod(t, app.log, "warn");
 
     ws.emit("open", {});
-    const outboundBytes = createOutboundEventBytes();
     const payload = createLogsNotification([
-      `Program data: ${Buffer.from(outboundBytes).toString("base64")}`,
+      toLogLine(createOutboundEventBytes()),
     ]);
     ws.emit("message", { data: payload });
 
@@ -310,12 +305,11 @@ describe("ws solana listener plugin", () => {
 
   it("logs missing signature for override events", async (t) => {
     const { app, ws, eventsRepository } = await buildListenerApp({ t });
-    const { mock: warnMock } = t.mock.method(app.log, "warn");
+    const warnMock = mockLogMethod(t, app.log, "warn");
 
     ws.emit("open", {});
-    const overrideBytes = createOverrideEventBytes();
     const payload = createLogsNotification([
-      `Program data: ${Buffer.from(overrideBytes).toString("base64")}`,
+      toLogLine(createOverrideEventBytes()),
     ]);
     ws.emit("message", { data: payload });
 

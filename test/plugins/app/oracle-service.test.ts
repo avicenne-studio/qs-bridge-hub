@@ -15,6 +15,7 @@ import {
 } from "../../../src/plugins/app/oracle-service.js";
 import { FastifyInstance } from "fastify";
 import { waitFor } from "../../helpers/wait-for.js";
+import { mockLogMethod } from "../../helpers/mocks/logger.js";
 import { buildCanonicalString } from "../../../src/plugins/infra/hub-signer.js";
 import {
   kOrdersRepository,
@@ -615,7 +616,7 @@ describe("oracle service", () => {
       const app = await withApp(t);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -645,7 +646,7 @@ describe("oracle service", () => {
       const app = await withApp(t);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -744,7 +745,7 @@ describe("oracle service", () => {
       const app = await withApp(t);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -776,7 +777,7 @@ describe("oracle service", () => {
       const app = await withApp(t);
       markOraclesHealthy(app, ORACLE_URLS);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -917,7 +918,7 @@ describe("oracle service", () => {
         status: "pending",
       });
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -1064,7 +1065,7 @@ describe("oracle service", () => {
       const { mock: createMock } = t.mock.method(ordersRepository, "create");
       createMock.mockImplementation(async () => null);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 
@@ -1109,7 +1110,7 @@ describe("oracle service", () => {
       const { mock: updateMock } = t.mock.method(ordersRepository, "update");
       updateMock.mockImplementation(async () => null);
 
-      const { mock: warnMock } = t.mock.method(app.log, "warn");
+      const warnMock = mockLogMethod(t, app.log, "warn");
       const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
       t.after(() => handle.stop());
 

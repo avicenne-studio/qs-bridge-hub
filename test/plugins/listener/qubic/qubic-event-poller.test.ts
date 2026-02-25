@@ -10,6 +10,7 @@ import { kEventsRepository } from "../../../../src/plugins/app/events/events.rep
 import { createInMemoryEventsRepository } from "../../../helpers/solana-events.js";
 import { waitFor } from "../../../helpers/wait-for.js";
 import { build } from "../../../helpers/build.js";
+import { mockLogMethod } from "../../../helpers/mocks/logger.js";
 
 function createQubicEvent(overrides: Partial<QubicEvent> = {}): QubicEvent {
   return {
@@ -65,23 +66,34 @@ async function createQubicServer(t: TestContext, handler: RequestListener) {
 }
 
 describe("qubic poller plugin", () => {
+  const BASE_CONFIG = {
+    QUBIC_POLLER_ENABLED: true,
+    QUBIC_POLLER_INTERVAL_MS: 10,
+    QUBIC_POLLER_TIMEOUT_MS: 1000,
+    ORACLE_URLS: "",
+  };
+
   async function buildApp(
     t: TestContext,
     rpcUrl: string,
     eventsRepo = createInMemoryEventsRepository(),
-    opts: { enabled?: boolean } = {},
+    opts: {
+      enabled?: boolean;
+      decorators?: Record<PropertyKey, unknown>;
+      config?: Partial<typeof BASE_CONFIG> & { QUBIC_RPC_URL?: string };
+    } = {},
   ) {
     const app = await build(t, {
       useMocks: false,
       config: {
-        QUBIC_POLLER_ENABLED: opts.enabled ?? true,
-        QUBIC_RPC_URL: rpcUrl,
-        QUBIC_POLLER_INTERVAL_MS: 10,
-        QUBIC_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
+        ...BASE_CONFIG,
+        ...opts.config,
+        QUBIC_POLLER_ENABLED: opts.enabled ?? BASE_CONFIG.QUBIC_POLLER_ENABLED,
+        QUBIC_RPC_URL: opts.config?.QUBIC_RPC_URL ?? rpcUrl,
       },
       decorators: {
         [kEventsRepository]: eventsRepo,
+        ...(opts.decorators ?? {}),
       },
     });
 
@@ -184,21 +196,9 @@ describe("qubic poller plugin", () => {
       res.end(JSON.stringify({ data: [{ nope: true }] }));
     });
 
-    const app = await build(t, {
-      useMocks: false,
-      config: {
-        QUBIC_POLLER_ENABLED: true,
-        QUBIC_RPC_URL: `http://127.0.0.1:${port}`,
-        QUBIC_POLLER_INTERVAL_MS: 10,
-        QUBIC_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
-      },
-      decorators: {
-        [kEventsRepository]: createInMemoryEventsRepository(),
-      },
-    });
+    const { app } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    const { mock: warnMock } = t.mock.method(app.log, "warn");
+    const warnMock = mockLogMethod(t, app.log, "warn");
 
     await waitFor(() => requestCount >= 2);
 
@@ -217,25 +217,13 @@ describe("qubic poller plugin", () => {
       res.end(JSON.stringify("bad-payload"));
     });
 
-    const app = await build(t, {
-      useMocks: false,
-      config: {
-        QUBIC_POLLER_ENABLED: true,
-        QUBIC_RPC_URL: `http://127.0.0.1:${port}`,
-        QUBIC_POLLER_INTERVAL_MS: 10,
-        QUBIC_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
-      },
-      decorators: {
-        [kEventsRepository]: createInMemoryEventsRepository(),
-      },
-    });
+    const { app } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    const { mock: warnMock } = t.mock.method(app.log, "warn");
+    const warnMock = mockLogMethod(t, app.log, "warn");
 
     await waitFor(() => requestCount >= 2);
 
-      t.assert.ok(
+    t.assert.ok(
       warnMock.calls.some(
         (call) => call.arguments[1] === "qubic events poll returned invalid payload",
       ),
@@ -244,24 +232,15 @@ describe("qubic poller plugin", () => {
 
   it("logs when fetcher throws and keeps running", async (t: TestContext) => {
     const eventsRepo = createInMemoryEventsRepository();
-    const app = await build(t, {
-      useMocks: false,
-      config: {
-        QUBIC_POLLER_ENABLED: true,
-        QUBIC_RPC_URL: "http://unused",
-        QUBIC_POLLER_INTERVAL_MS: 10,
-        QUBIC_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
-      },
+    const { app } = await buildApp(t, "http://unused", eventsRepo, {
       decorators: {
-        [kEventsRepository]: eventsRepo,
         [kQubicEventFetcher]: async () => {
           throw new Error("boom");
         },
       },
     });
 
-    const { mock: warnMock } = t.mock.method(app.log, "warn");
+    const warnMock = mockLogMethod(t, app.log, "warn");
 
     await waitFor(() =>
       warnMock.calls.some(
@@ -274,17 +253,8 @@ describe("qubic poller plugin", () => {
 
   it("uses custom fetcher when decorated", async (t: TestContext) => {
     const eventsRepo = createInMemoryEventsRepository();
-    await build(t, {
-      useMocks: false,
-      config: {
-        QUBIC_POLLER_ENABLED: true,
-        QUBIC_RPC_URL: "http://unused",
-        QUBIC_POLLER_INTERVAL_MS: 10,
-        QUBIC_POLLER_TIMEOUT_MS: 1000,
-        ORACLE_URLS: "",
-      },
+    await buildApp(t, "http://unused", eventsRepo, {
       decorators: {
-        [kEventsRepository]: eventsRepo,
         [kQubicEventFetcher]: async () =>
           ({ data: [createQubicEvent({ trxHash: "trx-custom" })] } as unknown as QubicEvent[]),
       },
