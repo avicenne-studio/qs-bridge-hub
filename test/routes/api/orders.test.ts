@@ -1,5 +1,6 @@
 import { test, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import { mockLogMethod } from "../../helpers/mocks/logger.js";
 import { kKnex, type KnexAccessor } from "../../../src/plugins/infra/knex.js";
 import {
   ORDERS_TABLE_NAME,
@@ -298,7 +299,7 @@ test("GET /api/orders handles repository errors", async (t: TestContext) => {
     throw new Error("db down");
   });
 
-  const { mock: logMock } = t.mock.method(app.log, "error");
+  const logMock = mockLogMethod(t, app.log, "error");
 
   const res = await app.inject({
     method: "GET",
@@ -381,7 +382,7 @@ test("POST /api/orders/estimate returns 500 on service error", async (t: TestCon
     decorators: { [kFeeEstimation]: fakeFeeEstimation },
   });
 
-  const { mock: logMock } = t.mock.method(app.log, "error");
+  const logMock = mockLogMethod(t, app.log, "error");
 
   const res = await app.inject({
     url: "/api/orders/estimate",

@@ -1,5 +1,6 @@
 import { test, TestContext } from "node:test";
 import { build } from "../../helpers/build.js";
+import { mockLogMethod } from "../../helpers/mocks/logger.js";
 import {
   kEventsRepository,
   type EventsRepository,
@@ -90,7 +91,7 @@ test("GET /api/orders/events handles repository errors", async (t: TestContext) 
   repoMock.mockImplementation(() => {
     throw new Error("db down");
   });
-  const { mock: logMock } = t.mock.method(app.log, "error");
+  const logMock = mockLogMethod(t, app.log, "error");
 
   const res = await app.inject({
     url: "/api/orders/events?created_after=1970-01-01%2000:00:00&after_id=0&limit=10",

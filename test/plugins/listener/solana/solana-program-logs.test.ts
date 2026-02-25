@@ -6,57 +6,11 @@ import {
   isKnownEventSize,
   logLinesToEvents,
 } from "../../../../src/plugins/app/listener/solana/solana-program-logs.js";
-import { getInboundEventEncoder } from "../../../../src/clients/js/types/inboundEvent.js";
-import { getOutboundEventEncoder } from "../../../../src/clients/js/types/outboundEvent.js";
-import { getOverrideOutboundEventEncoder } from "../../../../src/clients/js/types/overrideOutboundEvent.js";
-
-function createInboundEventBytes() {
-  const encoder = getInboundEventEncoder();
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 0,
-      networkIn: 1,
-      networkOut: 2,
-      tokenIn: new Uint8Array(32).fill(1),
-      tokenOut: new Uint8Array(32).fill(2),
-      fromAddress: new Uint8Array(32).fill(3),
-      toAddress: new Uint8Array(32).fill(4),
-      amount: 10n,
-      relayerFee: 2n,
-      nonce: new Uint8Array(32).fill(5),
-    })
-  );
-}
-
-function createOutboundEventBytes() {
-  const encoder = getOutboundEventEncoder();
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 1,
-      networkIn: 1,
-      networkOut: 1,
-      tokenIn: new Uint8Array(32).fill(1),
-      tokenOut: new Uint8Array(32).fill(2),
-      fromAddress: new Uint8Array(32).fill(3),
-      toAddress: new Uint8Array(32).fill(4),
-      amount: 10n,
-      relayerFee: 2n,
-      nonce: new Uint8Array(32).fill(5),
-    })
-  );
-}
-
-function createOverrideEventBytes() {
-  const encoder = getOverrideOutboundEventEncoder();
-  return new Uint8Array(
-    encoder.encode({
-      discriminator: 2,
-      toAddress: new Uint8Array(32).fill(7),
-      relayerFee: 3n,
-      nonce: new Uint8Array(32).fill(8),
-    })
-  );
-}
+import {
+  createInboundEventBytes,
+  createOutboundEventBytes,
+  createOverrideEventBytes,
+} from "../../../helpers/solana-events.js";
 
 describe("solana program log decoding", () => {
   it("extracts program data log lines", () => {
@@ -90,7 +44,7 @@ describe("solana program log decoding", () => {
     const override = decodeEventBytes(overrideBytes);
     assert.ok(override);
     assert.strictEqual(override.type, "override-outbound");
-    assert.strictEqual(override.event.relayerFee, 3n);
+    assert.strictEqual(override.event.relayerFee, 7n);
 
     assert.ok(isKnownEventSize(inboundBytes.length));
     assert.ok(isKnownEventSize(outboundBytes.length));
@@ -105,5 +59,12 @@ describe("solana program log decoding", () => {
     assert.strictEqual(decodeEventBytes(badOverride), null);
     assert.strictEqual(decodeEventBytes(new Uint8Array([9, 1, 2])), null);
     assert.strictEqual(isKnownEventSize(12), false);
+  });
+
+  it("returns null for empty or wrong-size event bytes", () => {
+    assert.strictEqual(decodeEventBytes(new Uint8Array()), null);
+    assert.strictEqual(decodeEventBytes(new Uint8Array([0, 1])), null);
+    assert.strictEqual(decodeEventBytes(new Uint8Array([1, 1])), null);
+    assert.strictEqual(decodeEventBytes(new Uint8Array([2, 1])), null);
   });
 });
