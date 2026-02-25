@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
 import { FastifyInstance, type FastifyBaseLogger } from "fastify";
-import { HttpError } from "./undici-client.js";
+import { formatErrorPayload } from "../common/error-format.js";
 import { AppConfig, kConfig } from "./env.js";
 
 export type Fetcher<TResponse> = (
@@ -115,20 +115,7 @@ function createPoller<TResponse>(
         errors.push({ server, error });
         // Promise.all rethrows on first failure. Promise.allSettled lets us
         // keep the successes even when some servers fail or time out.
-        const err =
-          error instanceof HttpError
-            ? {
-                name: error.name,
-                message: error.message,
-                statusCode: error.statusCode,
-                method: error.method,
-                url: error.url,
-                body: error.body,
-                stack: error.stack,
-              }
-            : error instanceof Error
-            ? { name: error.name, message: error.message, stack: error.stack }
-            : { value: error };
+        const err = formatErrorPayload(error);
         logger.error(
           { error: err, server },
           "Poller fetchOne error"
