@@ -126,7 +126,7 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
-const OrderByTrxHashQuerySchema = Type.Object({
+const OrderByTrxHashParamsSchema = Type.Object({
   hash: Type.String({
     description: "Origin transaction hash to lookup.",
     examples: ["0xabc123"],
@@ -328,10 +328,10 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   );
 
   fastify.get(
-    "/trx-hash",
+    "/trx-hash/:hash",
     {
       schema: {
-        querystring: OrderByTrxHashQuerySchema,
+        params: OrderByTrxHashParamsSchema,
         summary: "Fetch order by origin transaction hash",
         description:
           "Returns the order that originated from the provided transaction hash.",
@@ -342,7 +342,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler(request) {
-      const { hash } = request.query;
+      const { hash } = request.params;
       const order = await ordersRepository.findByOriginTrxHash(hash);
         if (!order) {
           throw fastify.httpErrors.notFound("Order not found");
