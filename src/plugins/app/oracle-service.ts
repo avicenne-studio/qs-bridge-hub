@@ -204,7 +204,7 @@ function startHealthPolling(
   const client = undiciClient.create();
   const defaults = pollerService.defaults;
 
-  const poller = pollerService.create({
+  const poller = pollerService.create<PolledOracleHealth>({
     servers: urls,
     fetchOne: async (server, signal) => {
       const headers = hubSigner.signHeaders({
@@ -241,6 +241,7 @@ function startHealthPolling(
         service.update(result.url, result.health);
       }
     },
+    logger: fastify.log,
     intervalMs: defaults.intervalMs,
     requestTimeoutMs: defaults.requestTimeoutMs,
     jitterMs: defaults.jitterMs,
@@ -375,6 +376,7 @@ function startOrdersPolling(
         }
       }
     },
+    logger: fastify.log,
     intervalMs: defaults.intervalMs,
     requestTimeoutMs: defaults.requestTimeoutMs,
     jitterMs: defaults.jitterMs,

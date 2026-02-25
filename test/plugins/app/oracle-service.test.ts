@@ -279,8 +279,8 @@ describe("oracle service", () => {
 
     test("groups orders by id", (t: TestContext) => {
       const orders: OracleOrderWithSignature[] = [
-        orderBase({ id: makeId(1), signature: "sig1", status: "in-progress", amount: "1" }),
-        orderBase({ id: makeId(2), signature: "sig2", status: "in-progress", amount: "2", from: "C", to: "D" }),
+        orderBase({ id: makeId(1), signature: "sig1", status: "pending", amount: "1" }),
+        orderBase({ id: makeId(2), signature: "sig2", status: "pending", amount: "2", from: "C", to: "D" }),
         orderBase({ id: makeId(1), signature: "sig3", status: "ready-for-relay", amount: "1" }),
       ];
 

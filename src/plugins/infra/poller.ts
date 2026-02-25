@@ -1,5 +1,6 @@
 import fp from "fastify-plugin";
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, type FastifyBaseLogger } from "fastify";
+import { formatErrorPayload } from "../common/error-format.js";
 import { AppConfig, kConfig } from "./env.js";
 
 export type Fetcher<TResponse> = (
@@ -17,6 +18,7 @@ export type PollerRoundContext = {
   round: number;
   startedAt: number;
   servers: readonly string[];
+  errors: readonly PollerError[];
 };
 
 export type PollerRoundHandler<TResponse> = (
@@ -28,6 +30,7 @@ export type CreatePollerConfig<TResponse> = PollerOptions & {
   servers: readonly string[];
   fetchOne: Fetcher<TResponse>;
   onRound: PollerRoundHandler<TResponse>;
+  logger: FastifyBaseLogger;
 };
 
 export type PollerHandle = {
@@ -42,6 +45,11 @@ export type PollerService = {
 };
 
 export const kPoller = Symbol("infra.poller");
+
+export type PollerError = {
+  server: string;
+  error: unknown;
+};
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -65,8 +73,15 @@ async function withTimeout<T>(
 function createPoller<TResponse>(
   config: CreatePollerConfig<TResponse>
 ): PollerHandle {
-  const { servers, fetchOne, onRound, intervalMs, requestTimeoutMs, jitterMs } =
-    config;
+  const {
+    servers,
+    fetchOne,
+    onRound,
+    intervalMs,
+    requestTimeoutMs,
+    jitterMs,
+    logger,
+  } = config;
 
   let runningPromise: Promise<void> | null = null;
   let shouldRun = false;
@@ -89,18 +104,29 @@ function createPoller<TResponse>(
       );
 
       const success: TResponse[] = [];
-      for (const result of settled) {
+      const errors: PollerError[] = [];
+      for (const [index, result] of settled.entries()) {
         if (result.status === "fulfilled") {
           success.push(result.value);
+          continue;
         }
+        const server = servers[index];
+        const error = result.reason;
+        errors.push({ server, error });
         // Promise.all rethrows on first failure. Promise.allSettled lets us
         // keep the successes even when some servers fail or time out.
+        const err = formatErrorPayload(error);
+        logger.error(
+          { error: err, server },
+          "Poller fetchOne error"
+        );
       }
 
       await onRound(success, {
         round,
         startedAt,
         servers: servers.slice(),
+        errors,
       });
 
       const elapsed = Date.now() - startedAt;
@@ -156,7 +182,7 @@ export default fp(
     fastify.decorate(kPoller, {
       defaults,
       create<TResponse>(config: CreatePollerConfig<TResponse>) {
-        const handle = createPoller(config);
+        const handle = createPoller({ ...config, logger: fastify.log });
         handles.add(handle);
         return handle;
       },

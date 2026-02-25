@@ -59,13 +59,16 @@ export default fp(
           table.string("source_nonce").notNullable();
           table.text("source_payload").notNullable();
           table.string("failure_reason_public").nullable();
-          table.string("status").notNullable().defaultTo("in-progress");
+          table.string("status").notNullable().defaultTo("pending");
           table
             .timestamp("created_at", { useTz: false })
             .notNullable()
             .defaultTo(db.fn.now());
         });
       }
+      await db(ORDERS_TABLE_NAME)
+        .where("status", "in-progress")
+        .update({ status: "pending" });
 
       const hasSignaturesTable = await db.schema.hasTable(
         ORDER_SIGNATURES_TABLE_NAME

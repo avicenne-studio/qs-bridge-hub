@@ -81,7 +81,7 @@ function selectConsensusDestinationTrxHash(
 ): string | undefined {
   const hashes = orders
     .map((o) => o.destination_trx_hash)
-    .filter((h): h is string => h != null && h.length > 0);
+    .filter((h): h is string => h !== undefined && h.length > 0);
 
   if (hashes.length === 0) return undefined;
 

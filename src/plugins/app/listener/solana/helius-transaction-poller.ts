@@ -9,6 +9,7 @@ import {
   kUndiciClient,
   type UndiciClientService,
   UndiciClient,
+  HttpError,
 } from "../../../infra/undici-client.js";
 import { createSolanaEventHandlers } from "../../events/solana/solana-events.js";
 import { logLinesToEvents, decodeEventBytes } from "./solana-program-logs.js";
@@ -42,6 +43,7 @@ export function createDefaultHeliusFetcher(
   const url = new URL(rpcUrl);
   const origin = url.origin;
   const path = url.pathname + url.search;
+  const requestUrl = `${origin}${path}`;
 
   return async (signal: AbortSignal) => {
     const now = Math.floor(Date.now() / 1000);
@@ -73,7 +75,13 @@ export function createDefaultHeliusFetcher(
     );
 
     if (response.error) {
-      throw response.error;
+      throw new HttpError({
+        message: response.error.message ?? "Helius RPC error",
+        statusCode: 200,
+        url: requestUrl,
+        method: "POST",
+        body: response,
+      });
     }
 
     return response.result?.data ?? [];
@@ -169,6 +177,7 @@ export default fp(
       onRound: async ([transactions = []]) => {
         await processTransactions(transactions);
       },
+      logger: fastify.log,
       intervalMs: config.HELIUS_POLLER_INTERVAL_MS,
       requestTimeoutMs: config.HELIUS_POLLER_TIMEOUT_MS,
       jitterMs: pollerService.defaults.jitterMs,

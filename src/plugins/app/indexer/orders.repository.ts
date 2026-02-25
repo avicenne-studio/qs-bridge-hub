@@ -224,7 +224,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     async findActivesIds(limit = 100) {
       const rows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
         .select("id")
-        .whereIn("status", ["pending", "in-progress"])
+        .whereIn("status", ["pending", "ready-for-relay", "relayed"])
         .orderBy("id", "asc")
         .limit(limit);
 

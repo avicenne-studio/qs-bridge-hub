@@ -4,6 +4,7 @@ import { build } from "../../helpers/build.js";
 import { createTrackedServer } from "../../helpers/http-server.js";
 import {
   kUndiciClient,
+  HttpError,
   type UndiciClientService,
 } from "../../../src/plugins/infra/undici-client.js";
 
@@ -16,6 +17,16 @@ describe("undici client plugin", () => {
       if (req.url === "/poll") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      if (req.url === "/text") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("plain-ok");
+        return;
+      }
+      if (req.url === "/bad-json") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("not-json");
         return;
       }
       res.writeHead(503, { "content-type": "application/json" });
@@ -43,8 +54,26 @@ describe("undici client plugin", () => {
     t.assert.strictEqual(receivedHeaders[0]["x-extra"], "1");
     t.assert.strictEqual(receivedHeaders[0]["x-default"], "override");
 
+    const textPayload = await client.getJson<string>(origin, "/text");
+    t.assert.strictEqual(textPayload, "plain-ok");
+
+    const badJsonPayload = await client.getJson<string>(origin, "/bad-json");
+    t.assert.strictEqual(badJsonPayload, "not-json");
+
     await t.assert.rejects(client.getJson(origin, "/fail"), /HTTP 503/);
     await t.assert.rejects(client.postJson(origin, "/fail", {}), /HTTP 503/);
+    await t.assert.rejects(
+      client.postJson(origin, "/fail", {}),
+      (err: unknown) => {
+        t.assert.ok(err instanceof HttpError);
+        const httpErr = err as HttpError;
+        t.assert.strictEqual(httpErr.statusCode, 503);
+        t.assert.strictEqual(httpErr.method, "POST");
+        t.assert.ok(httpErr.url.includes(origin));
+        t.assert.deepStrictEqual(httpErr.body, { error: "boom" });
+        return true;
+      }
+    );
     await client.close();
   });
 

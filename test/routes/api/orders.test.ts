@@ -27,7 +27,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    status: "in-progress",
+    status: "pending",
   });
   await ordersRepository.create({
     id: makeId(402),
@@ -65,7 +65,7 @@ test("GET /api/orders returns paginated list", async (t: TestContext) => {
   t.assert.strictEqual(body.data.length, 1);
   t.assert.strictEqual(body.data[0].from, "A");
   t.assert.strictEqual(body.data[0].dest, "qubic");
-  t.assert.strictEqual(body.data[0].status, "in-progress");
+  t.assert.strictEqual(body.data[0].status, "pending");
 });
 
 test("GET /api/orders filters by status (multiple)", async (t: TestContext) => {
@@ -75,7 +75,7 @@ test("GET /api/orders filters by status (multiple)", async (t: TestContext) => {
   const res = await app.inject({
     method: "GET",
     url: "/api/orders",
-    query: { page: "1", limit: "10", status: ["in-progress", "finalized"] },
+    query: { page: "1", limit: "10", status: ["pending", "finalized"] },
   });
 
   t.assert.strictEqual(res.statusCode, 200);
@@ -166,7 +166,7 @@ test("GET /api/orders filters by created_after and created_before", async (t: Te
     origin_trx_hash: "tx",
     source_nonce: "n",
     source_payload: "{}",
-    status: "in-progress" as const,
+    status: "pending" as const,
   };
   await knex(ORDERS_TABLE_NAME).insert([
     { ...row, id: makeId(501), created_at: dateOld },
@@ -250,7 +250,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
-    status: "in-progress",
+    status: "pending",
   });
   await ordersRepository.create({
     id: makeId(503),

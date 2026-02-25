@@ -33,6 +33,7 @@ describe("poller plugin", () => {
     ]);
 
     const pollResults: string[][] = [];
+    const pollErrors: Array<Array<{ server: string; error: unknown }>> = [];
     let done: (() => void) | null = null;
     const completion = new Promise<void>((resolve) => {
       done = resolve;
@@ -51,6 +52,7 @@ describe("poller plugin", () => {
       fetchOne: (s: string) => fetchOne(s),
       onRound: (responses, context) => {
         pollResults.push(responses);
+        pollErrors.push(context.errors);
 
         if (context.round === 2) {
           // Do not await stop inside onRound. Stop after onRound returns.
@@ -59,6 +61,7 @@ describe("poller plugin", () => {
           });
         }
       },
+      logger: app.log,
       intervalMs: 50,
       requestTimeoutMs: 10,
       jitterMs: 15,
@@ -71,6 +74,10 @@ describe("poller plugin", () => {
       ["ok-1-r1", "ok-2-r1"],
       ["ok-1-r2", "ok-2-r2"],
     ]);
+    t.assert.deepStrictEqual(
+      pollErrors.map((round) => round.map((entry) => entry.server)),
+      [["fail"], ["fail"]]
+    );
     t.assert.strictEqual(poller.isRunning(), false);
   });
 
@@ -111,6 +118,7 @@ describe("poller plugin", () => {
           poller.stop().then(() => done?.(), noop);
         });
       },
+      logger: app.log,
       intervalMs: 5,
       requestTimeoutMs: 10,
       jitterMs: 0,
@@ -123,6 +131,38 @@ describe("poller plugin", () => {
     await poller.stop().catch(noop);
   });
 
+  it("captures non-error rejections as poller errors", async (t: TestContext) => {
+    const app = await build(t, { useMocks: false });
+    const pollerService = app.getDecorator<PollerService>(kPoller);
+
+    let done: (() => void) | null = null;
+    const completion = new Promise<void>((resolve) => {
+      done = resolve;
+    });
+
+    const poller = pollerService.create({
+      servers: ["bad"],
+      fetchOne: async () => {
+        throw "boom";
+      },
+      onRound: (responses, context) => {
+        t.assert.deepStrictEqual(responses, []);
+        t.assert.strictEqual(context.errors.length, 1);
+        t.assert.strictEqual(context.errors[0].error, "boom");
+        queueMicrotask(() => {
+          poller.stop().then(() => done?.(), noop);
+        });
+      },
+      logger: app.log,
+      intervalMs: 5,
+      requestTimeoutMs: 10,
+      jitterMs: 0,
+    });
+
+    poller.start();
+    await completion;
+  });
+
   it("throws when start is invoked twice", async (t: TestContext) => {
     const app = await build(t, { useMocks: false });
     const pollerService = app.getDecorator<PollerService>(kPoller);
@@ -131,6 +171,7 @@ describe("poller plugin", () => {
       servers: ["s1"],
       fetchOne: async () => "ok",
       onRound: noop,
+      logger: app.log,
       intervalMs: 1,
       requestTimeoutMs: 10,
       jitterMs: 0,
@@ -210,6 +251,7 @@ describe("poller plugin", () => {
           });
         }
       },
+      logger: app.log,
       intervalMs: 5,
       requestTimeoutMs: 50,
       jitterMs: 0,

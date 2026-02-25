@@ -22,7 +22,7 @@ describe("ordersRepository", () => {
       amount: "123",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
 
     t.assert.ok(created);
@@ -32,7 +32,7 @@ describe("ordersRepository", () => {
     t.assert.strictEqual(created?.from, "Alice");
     t.assert.strictEqual(created?.to, "Bob");
     t.assert.strictEqual(created?.amount, "123");
-    t.assert.strictEqual(created?.status, "in-progress");
+    t.assert.strictEqual(created?.status, "pending");
 
     const fetched = await repo.findById(created!.id);
     t.assert.deepStrictEqual(fetched, created);
@@ -60,7 +60,7 @@ describe("ordersRepository", () => {
       amount: "10",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
     await repo.create({
       id: makeId(20),
@@ -82,7 +82,7 @@ describe("ordersRepository", () => {
       amount: "30",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
 
     const page1 = await repo.paginate({
@@ -120,7 +120,7 @@ describe("ordersRepository", () => {
       amount: "1",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
     await repo.create({
       id: makeId(12),
@@ -170,7 +170,7 @@ describe("ordersRepository", () => {
       amount: "50",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
 
     const updated = await repo.update(created!.id, {
@@ -261,7 +261,7 @@ describe("ordersRepository", () => {
       amount: "5",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
 
     const firstInsert = await repo.addSignatures(created!.id, ["sigA", "sigB"]);
@@ -295,7 +295,7 @@ describe("ordersRepository", () => {
       amount: "9",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "pending",
     });
 
     const orders = await repo.findByIdsWithSignatures([created!.id]);
@@ -318,7 +318,7 @@ describe("ordersRepository", () => {
       origin_trx_hash: "trx-hash",
       status: "pending",
     });
-    const inProgress = await repo.create({
+    const readyForRelay = await repo.create({
       id: makeId(91),
       source: "solana",
       dest: "qubic",
@@ -327,7 +327,7 @@ describe("ordersRepository", () => {
       amount: "2",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "in-progress",
+      status: "ready-for-relay",
     });
     await repo.create({
       id: makeId(92),
@@ -338,10 +338,10 @@ describe("ordersRepository", () => {
       amount: "3",
       relayerFee: "1",
       origin_trx_hash: "trx-hash",
-      status: "ready-for-relay",
+      status: "relayed",
     });
 
-    const expectedActiveIds = [pending!.id, inProgress!.id].sort();
+    const expectedActiveIds = [pending!.id, readyForRelay!.id, makeId(92)].sort();
     const activeIds = await repo.findActivesIds();
     t.assert.deepStrictEqual(activeIds, expectedActiveIds);
 

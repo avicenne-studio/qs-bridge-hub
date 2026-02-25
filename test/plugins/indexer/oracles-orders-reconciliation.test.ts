@@ -30,7 +30,7 @@ describe("oracleOrdersReconciliatior plugin", () => {
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
       { ...baseOrder, status: "finalized" },
-      { ...baseOrder, status: "in-progress" },
+      { ...baseOrder, status: "pending" },
     ];
 
     const result = reconciliator.reconcile(orders);
@@ -65,7 +65,7 @@ describe("oracleOrdersReconciliatior plugin", () => {
 
     const orders: OracleOrder[] = [
       { ...baseOrder, status: "finalized" },
-      { ...baseOrder, status: "in-progress" },
+      { ...baseOrder, status: "pending" },
     ];
 
       t.assert.throws(
