@@ -286,6 +286,31 @@ describe("helius poller plugin", () => {
     assert.ok(requestCount >= 2, "server should have received at least 2 requests");
   });
 
+  it("rejects responses that do not match the expected schema", async (t: TestContext) => {
+    let requestCount = 0;
+    const { port } = await createHeliusServer(t, (_req, res) => {
+      requestCount++;
+      res.writeHead(200, { "content-type": "application/json" });
+      if (requestCount === 1) {
+        res.end(JSON.stringify("not-an-object"));
+        return;
+      }
+      res.end(JSON.stringify({
+        result: {
+          data: [createTransaction("sig-after-schema-err", 400, [toLogLine(createEventBytes("outbound"))])],
+        },
+      }));
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() =>
+      eventsRepo.store.some((e) => e.signature === "sig-after-schema-err"),
+    );
+
+    assert.ok(requestCount >= 2, "server should have received at least 2 requests");
+  });
+
   it("uses custom fetcher when decorated", async (t: TestContext) => {
     const customTransactions = [
       createTransaction("custom-sig", 999, [toLogLine(createEventBytes("outbound"))]),

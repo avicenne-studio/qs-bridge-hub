@@ -15,33 +15,24 @@ import {
   UndiciClient,
   HttpError,
 } from "../../../infra/undici-client.js";
+import { Value } from "@sinclair/typebox/value";
 import { createSolanaEventHandlers } from "../../events/solana/solana-events.js";
 import { logLinesToEvents, decodeEventBytes } from "./solana-program-logs.js";
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../../../../clients/js/programs/qsBridge.js";
+import {
+  HeliusRpcResponseSchema,
+  type HeliusRpcResponse,
+} from "./schemas/helius.js";
 
-export type HeliusTransaction = {
-  transaction: {
-    signatures: string[];
-  };
-  slot: number;
-  meta: {
-    err: unknown | null;
-    logMessages: string[] | null;
-  };
-};
+export type {
+  HeliusTransaction,
+  HeliusRpcResult,
+} from "./schemas/helius.js";
 
-export type HeliusRpcResult = {
-  data: HeliusTransaction[];
-  paginationToken: string | null;
-};
-
-type HeliusRpcResponse = {
-  result?: {
-    data?: HeliusTransaction[];
-    paginationToken?: string;
-  };
-  error?: { message: string };
-};
+import type {
+  HeliusTransaction,
+  HeliusRpcResult,
+} from "./schemas/helius.js";
 
 export type HeliusFetcherOptions = {
   startTime: number;
@@ -96,12 +87,19 @@ export function createDefaultHeliusFetcher(
       ],
     };
 
-    const response = await client.postJson<HeliusRpcResponse>(
-      origin,
-      path,
-      body,
-      signal,
-    );
+    const raw = await client.postJson<unknown>(origin, path, body, signal);
+
+    if (!Value.Check(HeliusRpcResponseSchema, raw)) {
+      throw new HttpError({
+        message: "Helius RPC response does not match expected schema",
+        statusCode: 200,
+        url: requestUrl,
+        method: "POST",
+        body: raw,
+      });
+    }
+
+    const response = raw as HeliusRpcResponse;
 
     if (response.error) {
       throw new HttpError({
