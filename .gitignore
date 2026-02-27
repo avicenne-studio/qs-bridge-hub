@@ -143,3 +143,6 @@ yarn.lock
 
 # sqlite
 .data
+
+#AI agents
+.claude
