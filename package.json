@@ -47,7 +47,7 @@
     "@solana-program/token": "^0.9.0",
     "@solana/kit": "^5.3.0",
     "better-sqlite3": "^12.6.2",
-    "close-with-grace": "^2.4.0",
+    "close-with-grace": "^2.5.0",
     "concurrently": "^9.2.1",
     "fastify": "^5.6.0",
     "fastify-cli": "^7.4.1",
