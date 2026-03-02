@@ -15,58 +15,32 @@ export const kOracleOrdersReconciliatior = Symbol(
   "app.oracleOrdersReconciliatior"
 );
 
-function ensureIdenticalOrders(orders: OracleOrder[]) {
-  if (orders.length === 0) {
-    throw new Error("Cannot reconcile an empty orders list");
-  }
+type ConsensusCounts = {
+  status: Map<OracleOrderStatusType, number>;
+  relayerFee: Map<string, number>;
+  to: Map<string, number>;
+  destinationTrxHash: Map<string, number>;
+  failureReason: Map<string, number>;
+};
 
-  const [first, ...rest] = orders;
-
-  for (const order of rest) {
-    if (
-      order.source !== first.source ||
-      order.dest !== first.dest ||
-      order.from !== first.from ||
-      order.amount !== first.amount ||
-      order.origin_trx_hash !== first.origin_trx_hash
-    ) {
-      throw new Error("Orders to reconcile must be identical");
-    }
-  }
+function createCounts(): ConsensusCounts {
+  return {
+    status: new Map(),
+    relayerFee: new Map(),
+    to: new Map(),
+    destinationTrxHash: new Map(),
+    failureReason: new Map(),
+  };
 }
 
-function selectConsensusStatus(
-  orders: OracleOrder[]
-): OracleOrderStatusType {
-  return selectConsensusValue(
-    orders.map((order) => order.status),
-    "status"
-  );
+function tally<T extends string>(counts: Map<T, number>, value: T) {
+  counts.set(value, (counts.get(value) ?? 0) + 1);
 }
 
-function selectConsensusRelayerFee(orders: OracleOrder[]): string {
-  return selectConsensusValue(
-    orders.map((order) => order.relayerFee),
-    "relayerFee"
-  );
-}
-
-function selectConsensusToAddress(orders: OracleOrder[]): string {
-  return selectConsensusValue(
-    orders.map((order) => order.to),
-    "to"
-  );
-}
-
-function selectConsensusValue<T extends string>(
-  values: T[],
+function selectConsensusFromCounts<T extends string>(
+  counts: Map<T, number>,
   label: string
 ): T {
-  const counts = new Map<T, number>();
-  for (const value of values) {
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-
   let winner: T | null = null;
   let highest = 0;
   let isTie = false;
@@ -88,73 +62,79 @@ function selectConsensusValue<T extends string>(
   return winner;
 }
 
-function selectConsensusDestinationTrxHash(
-  orders: OracleOrder[]
-): string | undefined {
-  const hashes = orders
-    .map((o) => o.destination_trx_hash)
-    .filter((h): h is string => h !== undefined && h.length > 0);
-
-  if (hashes.length === 0) return undefined;
-
-  const counts = new Map<string, number>();
-  for (const h of hashes) {
-    counts.set(h, (counts.get(h) ?? 0) + 1);
+function selectBestOptional(counts: Map<string, number>): string | undefined {
+  if (counts.size === 0) {
+    return undefined;
   }
-
   let best: string | undefined;
   let highest = 0;
-  for (const [h, count] of counts) {
+  for (const [value, count] of counts) {
     if (count > highest) {
       highest = count;
-      best = h;
+      best = value;
     }
   }
-
   return best;
 }
 
-function selectConsensusFailureReason(
-  orders: OracleOrder[]
-): string | undefined {
-  const reasons = orders
-    .map((o) => o.failure_reason_public)
-    .filter((reason): reason is string => Boolean(reason && reason.length > 0));
-
-  if (reasons.length === 0) {
-    return undefined;
+function computeConsensus(orders: OracleOrder[]) {
+  if (orders.length === 0) {
+    throw new Error("Cannot reconcile an empty orders list");
   }
 
-  const counts = new Map<string, number>();
-  for (const reason of reasons) {
-    counts.set(reason, (counts.get(reason) ?? 0) + 1);
-  }
+  const [first] = orders;
+  const counts = createCounts();
 
-  let best: string | undefined;
-  let highest = 0;
-  for (const [reason, count] of counts) {
-    if (count > highest) {
-      highest = count;
-      best = reason;
+  for (const order of orders) {
+    if (
+      order.source !== first.source ||
+      order.dest !== first.dest ||
+      order.from !== first.from ||
+      order.amount !== first.amount ||
+      order.origin_trx_hash !== first.origin_trx_hash
+    ) {
+      throw new Error("Orders to reconcile must be identical");
+    }
+
+    tally(counts.status, order.status);
+    tally(counts.relayerFee, order.relayerFee);
+    tally(counts.to, order.to);
+
+    if (order.destination_trx_hash && order.destination_trx_hash.length > 0) {
+      tally(counts.destinationTrxHash, order.destination_trx_hash);
+    }
+
+    if (order.failure_reason_public && order.failure_reason_public.length > 0) {
+      tally(counts.failureReason, order.failure_reason_public);
     }
   }
 
-  return best;
+  const status = selectConsensusFromCounts(counts.status, "status");
+  const relayerFee = selectConsensusFromCounts(counts.relayerFee, "relayerFee");
+  const to = selectConsensusFromCounts(counts.to, "to");
+  const destinationTrxHash = selectBestOptional(counts.destinationTrxHash);
+  const failureReason =
+    status === "failed" ? selectBestOptional(counts.failureReason) : undefined;
+
+  return {
+    status,
+    relayerFee,
+    to,
+    destinationTrxHash,
+    failureReason,
+  };
 }
 
 export default fp(
   function (fastify: FastifyInstance) {
     const reconcile: ReconcileFn = (orders) => {
-      ensureIdenticalOrders(orders);
-
-      const consensusStatus = selectConsensusStatus(orders);
-      const consensusRelayerFee = selectConsensusRelayerFee(orders);
-      const consensusTo = selectConsensusToAddress(orders);
-      const consensusHash = selectConsensusDestinationTrxHash(orders);
-      const consensusFailureReason =
-        consensusStatus === "failed"
-          ? selectConsensusFailureReason(orders)
-          : undefined;
+      const {
+        status: consensusStatus,
+        relayerFee: consensusRelayerFee,
+        to: consensusTo,
+        destinationTrxHash: consensusHash,
+        failureReason: consensusFailureReason,
+      } = computeConsensus(orders);
       const reconciled: OracleOrder = {
         ...orders[0],
         status: consensusStatus,
