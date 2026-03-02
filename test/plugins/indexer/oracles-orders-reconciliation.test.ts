@@ -125,4 +125,41 @@ describe("oracleOrdersReconciliatior plugin", () => {
     t.assert.strictEqual(result.status, "relayed");
     t.assert.strictEqual(result.destination_trx_hash, undefined);
   });
+
+  it("selects consensus failure_reason_public for failed orders", async (t: TestContext) => {
+    const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
+
+    const orders: OracleOrder[] = [
+      { ...baseOrder, status: "failed", failure_reason_public: "reason-a" },
+      { ...baseOrder, status: "failed", failure_reason_public: "reason-a" },
+      { ...baseOrder, status: "failed", failure_reason_public: "reason-b" },
+    ];
+
+    const result = reconciliator.reconcile(orders);
+
+    t.assert.strictEqual(result.status, "failed");
+    t.assert.strictEqual(result.failure_reason_public, "reason-a");
+  });
+
+  it("does not set failure_reason_public when status is not failed", async (t: TestContext) => {
+    const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
+
+    const orders: OracleOrder[] = [
+      { ...baseOrder, status: "pending", failure_reason_public: "reason-a" },
+      { ...baseOrder, status: "pending", failure_reason_public: "reason-a" },
+    ];
+
+    const result = reconciliator.reconcile(orders);
+
+    t.assert.strictEqual(result.status, "pending");
+    t.assert.strictEqual(result.failure_reason_public, undefined);
+  });
 });

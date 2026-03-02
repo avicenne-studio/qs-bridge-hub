@@ -102,6 +102,34 @@ function selectConsensusDestinationTrxHash(
   return best;
 }
 
+function selectConsensusFailureReason(
+  orders: OracleOrder[]
+): string | undefined {
+  const reasons = orders
+    .map((o) => o.failure_reason_public)
+    .filter((reason): reason is string => Boolean(reason && reason.length > 0));
+
+  if (reasons.length === 0) {
+    return undefined;
+  }
+
+  const counts = new Map<string, number>();
+  for (const reason of reasons) {
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+
+  let best: string | undefined;
+  let highest = 0;
+  for (const [reason, count] of counts) {
+    if (count > highest) {
+      highest = count;
+      best = reason;
+    }
+  }
+
+  return best;
+}
+
 export default fp(
   function (fastify: FastifyInstance) {
     const reconcile: ReconcileFn = (orders) => {
@@ -109,11 +137,22 @@ export default fp(
 
       const consensusStatus = selectConsensusStatus(orders);
       const consensusHash = selectConsensusDestinationTrxHash(orders);
-      return {
+      const consensusFailureReason =
+        consensusStatus === "failed"
+          ? selectConsensusFailureReason(orders)
+          : undefined;
+      const reconciled: OracleOrder = {
         ...orders[0],
         status: consensusStatus,
         ...(consensusHash !== undefined && { destination_trx_hash: consensusHash }),
       };
+      if (consensusStatus === "failed" && consensusFailureReason !== undefined) {
+          reconciled.failure_reason_public = consensusFailureReason;
+      } else {
+        delete reconciled.failure_reason_public;
+      }
+
+      return reconciled;
     };
 
     fastify.decorate(kOracleOrdersReconciliatior, {

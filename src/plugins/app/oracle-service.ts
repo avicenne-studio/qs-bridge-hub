@@ -361,6 +361,9 @@ function startOrdersPolling(
             ...(consensus.destination_trx_hash && {
               destination_trx_hash: consensus.destination_trx_hash,
             }),
+            ...(consensus.failure_reason_public && {
+              failure_reason_public: consensus.failure_reason_public,
+            }),
           });
 
           if (!updated) {

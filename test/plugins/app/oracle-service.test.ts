@@ -591,6 +591,51 @@ describe("oracle service", () => {
       t.assert.strictEqual(updated?.status, "failed");
     });
 
+    test("propagates failure_reason_public when consensus is failed", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "failed", { failure_reason_public: "fee-too-low" }),
+          serverOrderFactory("sig-2", "failed", { failure_reason_public: "fee-too-low" }),
+          serverOrderFactory("sig-3", "failed", { failure_reason_public: "mismatch" }),
+        ],
+        responseModes: ["data", "data", "array"],
+        orderIds: [makeId(153)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const created = await ordersRepository.create({
+        id: makeId(153),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        status: "pending",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await ordersRepository.findById(created!.id);
+        return updated?.status === "failed" &&
+          updated?.failure_reason_public === "fee-too-low";
+      }, 15_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(created!.id);
+      t.assert.strictEqual(updated?.status, "failed");
+      t.assert.strictEqual(updated?.failure_reason_public, "fee-too-low");
+    });
+
     test("computes required signature thresholds", (t: TestContext) => {
       t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);
       t.assert.strictEqual(computeRequiredSignatures(3, 6), 3);
