@@ -31,7 +31,7 @@ export const HeliusRpcResponseSchema = Type.Object(
       Type.Object(
         {
           data: Type.Optional(Type.Array(HeliusTransactionSchema)),
-          paginationToken: Type.Optional(Type.String()),
+          paginationToken: Type.Union([Type.String(), Type.Null()]),
         },
         { additionalProperties: true },
       ),

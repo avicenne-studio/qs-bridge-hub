@@ -28,7 +28,7 @@ function createTransaction(
 function heliusJsonHandler(data: HeliusTransaction[]): RequestListener {
   return (_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ result: { data } }));
+    res.end(JSON.stringify({ result: { data, paginationToken: null } }));
   };
 }
 
@@ -146,12 +146,30 @@ describe("helius poller plugin", () => {
     assert.strictEqual(eventsRepo.store[1].signature, "sig-new");
   });
 
+  it("handles paginationToken: null in response", async (t: TestContext) => {
+    const { port } = await createHeliusServer(t, (_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        result: {
+          data: [createTransaction("sig-null-token", 100, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
+        },
+      }));
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    assert.strictEqual(eventsRepo.store[0].signature, "sig-null-token");
+  });
+
   it("handles empty result.data gracefully", async (t: TestContext) => {
     let requestCount = 0;
     const { port } = await createHeliusServer(t, (_req, res) => {
       requestCount++;
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ result: {} }));
+      res.end(JSON.stringify({ result: { paginationToken: null } }));
     });
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
@@ -174,6 +192,7 @@ describe("helius poller plugin", () => {
         JSON.stringify({
           result: {
             data: [createTransaction("sig-recover", 100, [toLogLine(createEventBytes("outbound"))])],
+            paginationToken: null,
           },
         })
       );
@@ -205,7 +224,7 @@ describe("helius poller plugin", () => {
     const { port } = await createHeliusServer(t, (_req, res) => {
       requestCount++;
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ result: { data: [] } }));
+      res.end(JSON.stringify({ result: { data: [], paginationToken: null } }));
     });
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`, undefined, { enabled: false });
@@ -224,6 +243,7 @@ describe("helius poller plugin", () => {
       res.end(JSON.stringify({
         result: {
           data: [createTransaction("sig-stable", 100, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
         },
       }));
     });
@@ -248,6 +268,7 @@ describe("helius poller plugin", () => {
       res.end(JSON.stringify({
         result: {
           data: [createTransaction("sig-after-error", 200, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
         },
       }));
     });
@@ -273,6 +294,7 @@ describe("helius poller plugin", () => {
       res.end(JSON.stringify({
         result: {
           data: [createTransaction("sig-after-rpc-error", 300, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
         },
       }));
     });
@@ -298,6 +320,7 @@ describe("helius poller plugin", () => {
       res.end(JSON.stringify({
         result: {
           data: [createTransaction("sig-after-schema-err", 400, [toLogLine(createEventBytes("outbound"))])],
+          paginationToken: null,
         },
       }));
     });
@@ -353,6 +376,7 @@ describe("helius poller plugin", () => {
           res.end(JSON.stringify({
             result: {
               data: [createTransaction("sig-page2", 200, [toLogLine(createEventBytes("inbound"))])],
+              paginationToken: null,
             },
           }));
         }
