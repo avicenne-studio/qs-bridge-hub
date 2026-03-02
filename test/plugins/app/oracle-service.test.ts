@@ -547,6 +547,50 @@ describe("oracle service", () => {
       t.assert.strictEqual(updated?.status, "ready-for-relay");
     });
 
+    test("does not mark failed orders ready-for-relay even if threshold is met", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "failed"),
+          serverOrderFactory("sig-2", "failed"),
+          serverOrderFactory("sig-3", "failed"),
+        ],
+        responseModes: ["data", "data", "array"],
+        orderIds: [makeId(152)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const created = await ordersRepository.create({
+        id: makeId(152),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        status: "pending",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const withSignatures =
+          await ordersRepository.findByIdsWithSignatures([created!.id]);
+        return withSignatures[0]?.signatures.length === 3;
+      }, 15_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(created!.id);
+      t.assert.strictEqual(updated?.status, "failed");
+    });
+
     test("computes required signature thresholds", (t: TestContext) => {
       t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);
       t.assert.strictEqual(computeRequiredSignatures(3, 6), 3);

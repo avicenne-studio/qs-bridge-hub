@@ -347,7 +347,9 @@ function startOrdersPolling(
             signatures,
           );
           const canBeRelayable =
-            consensus.status !== "finalized" && consensus.status !== "relayed";
+            consensus.status !== "finalized" &&
+            consensus.status !== "relayed" &&
+            consensus.status !== "failed";
           const meetsThreshold = signatureCounts.total >= requiredSignatures();
           const nextStatus =
             meetsThreshold && canBeRelayable
