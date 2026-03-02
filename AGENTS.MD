@@ -54,3 +54,4 @@ Tables are auto-created by `src/plugins/infra/knex.ts`:
 ## Testing
 - Tests live under `test/` and mirror runtime folders.
 - Prefer the shared Fastify builder in `test/helpers` and avoid direct `process.env` access in tests.
+
