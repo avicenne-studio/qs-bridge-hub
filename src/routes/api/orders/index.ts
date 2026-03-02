@@ -133,13 +133,18 @@ const OrderByTrxHashParamsSchema = Type.Object({
   }),
 });
 
-const OrderByTrxHashResponseSchema = Type.Object({
-  data: StoredOrderSchema,
-});
-
 const SignatureSchema = Type.String({
   description: "Oracle signature payload (string-encoded).",
   examples: ["0xdeadbeef"],
+});
+
+const OrderByTrxHashResponseSchema = Type.Object({
+  data: Type.Intersect([
+    StoredOrderSchema,
+    Type.Object({
+      signatures: Type.Array(SignatureSchema),
+    }),
+  ]),
 });
 
 const RelayableSignatureSchema = Type.Object({
@@ -343,12 +348,17 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
     },
     async function handler(request) {
       const { hash } = request.params;
-      const order = await ordersRepository.findByOriginTrxHash(hash);
-        if (!order) {
-          throw fastify.httpErrors.notFound("Order not found");
-        }
+      const order = await ordersRepository.findByOriginTrxHashWithSignatures(hash);
+      if (!order) {
+        throw fastify.httpErrors.notFound("Order not found");
+      }
 
-        return { data: order };
+      return {
+        data: {
+          ...order,
+          signatures: order.signatures.map((signature) => signature.signature),
+        },
+      };
     }
   );
 
