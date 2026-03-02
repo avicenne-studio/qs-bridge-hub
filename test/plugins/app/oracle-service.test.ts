@@ -1065,6 +1065,90 @@ describe("oracle service", () => {
       t.assert.strictEqual(updated?.destination_trx_hash, txHash);
     });
 
+    test("propagates relayerFee updates from consensus", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending", { relayerFee: "2" }),
+          serverOrderFactory("sig-2", "pending", { relayerFee: "2" }),
+          serverOrderFactory("sig-3", "pending", { relayerFee: "1" }),
+        ],
+        orderIds: [makeId(181)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      await ordersRepository.create({
+        id: makeId(181),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        status: "pending",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await ordersRepository.findById(makeId(181));
+        return updated?.relayerFee === "2";
+      }, 10_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(makeId(181));
+      t.assert.strictEqual(updated?.relayerFee, "2");
+    });
+
+    test("propagates destination address updates from consensus", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending", { to: "X" }),
+          serverOrderFactory("sig-2", "pending", { to: "X" }),
+          serverOrderFactory("sig-3", "pending", { to: "Y" }),
+        ],
+        orderIds: [makeId(182)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      await ordersRepository.create({
+        id: makeId(182),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        status: "pending",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await ordersRepository.findById(makeId(182));
+        return updated?.to === "X";
+      }, 10_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(makeId(182));
+      t.assert.strictEqual(updated?.to, "X");
+    });
+
     test("creates missing orders when polling oracles", async (t: TestContext) => {
       const orderId = makeId(250);
       await setupThreeOrderServers(t, {

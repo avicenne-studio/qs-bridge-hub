@@ -107,6 +107,44 @@ describe("oracleOrdersReconciliatior plugin", () => {
     t.assert.strictEqual(result.destination_trx_hash, "hash-abc");
   });
 
+  it("picks consensus relayerFee from majority", async (t: TestContext) => {
+    const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
+
+    const orders: OracleOrder[] = [
+      { ...baseOrder, status: "pending", relayerFee: "1" },
+      { ...baseOrder, status: "pending", relayerFee: "2" },
+      { ...baseOrder, status: "pending", relayerFee: "1" },
+    ];
+
+    const result = reconciliator.reconcile(orders);
+
+    t.assert.strictEqual(result.status, "pending");
+    t.assert.strictEqual(result.relayerFee, "1");
+  });
+
+  it("picks consensus destination address from majority", async (t: TestContext) => {
+    const app = await build(t);
+    const reconciliator =
+      app.getDecorator<OracleOrdersReconciliatiorService>(
+        kOracleOrdersReconciliatior
+      );
+
+    const orders: OracleOrder[] = [
+      { ...baseOrder, status: "pending", to: "X" },
+      { ...baseOrder, status: "pending", to: "Y" },
+      { ...baseOrder, status: "pending", to: "X" },
+    ];
+
+    const result = reconciliator.reconcile(orders);
+
+    t.assert.strictEqual(result.status, "pending");
+    t.assert.strictEqual(result.to, "X");
+  });
+
   it("returns no destination_trx_hash when no oracle has it", async (t: TestContext) => {
     const app = await build(t);
     const reconciliator =

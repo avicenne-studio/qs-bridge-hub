@@ -358,6 +358,8 @@ function startOrdersPolling(
 
           const updated = await ordersRepository.update(orderId, {
             status: nextStatus,
+            to: consensus.to,
+            relayerFee: consensus.relayerFee,
             ...(consensus.destination_trx_hash && {
               destination_trx_hash: consensus.destination_trx_hash,
             }),
