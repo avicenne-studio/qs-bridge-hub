@@ -303,6 +303,55 @@ describe("ordersRepository", () => {
     t.assert.deepStrictEqual(orders[0].signatures, []);
   });
 
+  it("should find by origin trx hash", async (t: TestContext) => {
+    const app = await build(t);
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
+
+    await repo.create({
+      id: makeId(781),
+      source: "solana",
+      dest: "qubic",
+      from: "OriginA",
+      to: "OriginB",
+      amount: "9",
+      relayerFee: "1",
+      origin_trx_hash: "trx-hash-basic",
+      status: "pending",
+    });
+
+    const found = await repo.findByOriginTrxHash("trx-hash-basic");
+    t.assert.ok(found);
+    t.assert.strictEqual(found?.origin_trx_hash, "trx-hash-basic");
+
+    const missing = await repo.findByOriginTrxHash("trx-hash-missing");
+    t.assert.strictEqual(missing, null);
+  });
+
+  it("should find by origin trx hash with signatures", async (t: TestContext) => {
+    const app = await build(t);
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
+
+    const created = await repo.create({
+      id: makeId(79),
+      source: "solana",
+      dest: "qubic",
+      from: "OriginA",
+      to: "OriginB",
+      amount: "9",
+      relayerFee: "1",
+      origin_trx_hash: "trx-hash-origin",
+      status: "pending",
+    });
+
+    await repo.addSignatures(created!.id, ["sig-a", "sig-b"]);
+
+    const order = await repo.findByOriginTrxHashWithSignatures("trx-hash-origin");
+    t.assert.ok(order);
+    t.assert.strictEqual(order?.id, created!.id);
+    t.assert.strictEqual(order?.signatures.length, 2);
+    t.assert.strictEqual(order?.signatures[0].order_id, created!.id);
+  });
+
   it("should return active ids with limit", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);

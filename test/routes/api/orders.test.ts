@@ -194,6 +194,11 @@ test("GET /api/orders filters by created_after and created_before", async (t: Te
 test("GET /api/orders/trx-hash returns order by transaction hash", async (t: TestContext) => {
   const app = await build(t);
   await seedOrders(app);
+  const ordersRepository =
+    app.getDecorator<OrdersRepository>(kOrdersRepository);
+
+  const orderId = makeId(401);
+  await ordersRepository.addSignatures(orderId, ["sig-1", "sig-2"]);
 
   const res = await app.inject({
     method: "GET",
@@ -203,7 +208,8 @@ test("GET /api/orders/trx-hash returns order by transaction hash", async (t: Tes
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   t.assert.strictEqual(body.data.origin_trx_hash, "trx-hash");
-  t.assert.strictEqual(body.data.id, makeId(401));
+  t.assert.strictEqual(body.data.id, orderId);
+  t.assert.deepStrictEqual(body.data.signatures, ["sig-1", "sig-2"]);
 });
 
 test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: TestContext) => {

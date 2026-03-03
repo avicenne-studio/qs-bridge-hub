@@ -11,6 +11,9 @@ export interface OrdersRepository {
   paginate(q: OrderQuery): Promise<{ orders: StoredOrder[]; total: number }>;
   findById(id: string): Promise<StoredOrder | null>;
   findByOriginTrxHash(hash: string): Promise<StoredOrder | null>;
+  findByOriginTrxHashWithSignatures(
+    hash: string
+  ): Promise<OrderWithSignatures | null>;
   create(newOrder: StoredOrder): Promise<StoredOrder | null>;
   update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
   delete(id: string): Promise<boolean>;
@@ -185,6 +188,72 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         .where("origin_trx_hash", hash)
         .first();
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
+    },
+
+    async findByOriginTrxHashWithSignatures(hash: string) {
+      type OrderWithSignatureRow = StoredOrder & {
+        signature_id: number | null;
+        signature_order_id: string | null;
+        signature_value: string | null;
+      };
+
+      const rows = (await knex
+        .from(`${ORDERS_TABLE_NAME} as orders`)
+        .leftJoin(
+          `${ORDER_SIGNATURES_TABLE_NAME} as signatures`,
+          "orders.id",
+          "signatures.order_id"
+        )
+        .select(
+          "orders.id",
+          "orders.source",
+          "orders.dest",
+          "orders.from",
+          "orders.to",
+          "orders.amount",
+          "orders.relayerFee",
+          "orders.origin_trx_hash",
+          "orders.destination_trx_hash",
+          "orders.source_nonce",
+          "orders.source_payload",
+          "orders.failure_reason_public",
+          "orders.status",
+          "signatures.id as signature_id",
+          "signatures.order_id as signature_order_id",
+          "signatures.signature as signature_value"
+        )
+        .where("orders.origin_trx_hash", hash)
+        .orderBy("orders.id", "asc")) as OrderWithSignatureRow[];
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      const [first] = rows;
+      const signatures: StoredSignature[] = [];
+
+      for (const row of rows) {
+        if (
+          row.signature_id === null ||
+          row.signature_order_id === null ||
+          row.signature_value === null
+        ) {
+          continue;
+        }
+        signatures.push({
+          id: row.signature_id,
+          order_id: row.signature_order_id,
+          signature: row.signature_value,
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { signature_id, signature_order_id, signature_value, ...order } = first
+
+      return {
+        ...normalizeStoredOrder(order),
+        signatures,
+      };
     },
 
     async create(newOrder: CreateOrder) {
