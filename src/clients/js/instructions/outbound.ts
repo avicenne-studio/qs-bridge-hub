@@ -94,6 +94,7 @@ export type OutboundInstructionData = {
   amount: bigint;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export type OutboundInstructionDataArgs = {
@@ -103,6 +104,7 @@ export type OutboundInstructionDataArgs = {
   amount: number | bigint;
   relayerFee: number | bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export function getOutboundInstructionDataEncoder(): FixedSizeEncoder<OutboundInstructionDataArgs> {
@@ -115,6 +117,7 @@ export function getOutboundInstructionDataEncoder(): FixedSizeEncoder<OutboundIn
       ["amount", getU64Encoder()],
       ["relayerFee", getU64Encoder()],
       ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
+      ["orderEra", getU32Encoder()],
     ]),
     (value) => ({ ...value, discriminator: OUTBOUND_DISCRIMINATOR }),
   );
@@ -129,6 +132,7 @@ export function getOutboundInstructionDataDecoder(): FixedSizeDecoder<OutboundIn
     ["amount", getU64Decoder()],
     ["relayerFee", getU64Decoder()],
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],
+    ["orderEra", getU32Decoder()],
   ]);
 }
 
@@ -171,6 +175,7 @@ export type OutboundInput<
   amount: OutboundInstructionDataArgs["amount"];
   relayerFee: OutboundInstructionDataArgs["relayerFee"];
   nonce: OutboundInstructionDataArgs["nonce"];
+  orderEra: OutboundInstructionDataArgs["orderEra"];
 };
 
 export function getOutboundInstruction<

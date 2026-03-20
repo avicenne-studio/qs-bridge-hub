@@ -37,6 +37,7 @@ export type OutboundEvent = {
   amount: bigint;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export type OutboundEventArgs = {
@@ -50,6 +51,7 @@ export type OutboundEventArgs = {
   amount: number | bigint;
   relayerFee: number | bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export function getOutboundEventEncoder(): FixedSizeEncoder<OutboundEventArgs> {
@@ -64,6 +66,7 @@ export function getOutboundEventEncoder(): FixedSizeEncoder<OutboundEventArgs> {
     ["amount", getU64Encoder()],
     ["relayerFee", getU64Encoder()],
     ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
+    ["orderEra", getU32Encoder()],
   ]);
 }
 
@@ -79,6 +82,7 @@ export function getOutboundEventDecoder(): FixedSizeDecoder<OutboundEvent> {
     ["amount", getU64Decoder()],
     ["relayerFee", getU64Decoder()],
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],
+    ["orderEra", getU32Decoder()],
   ]);
 }
 

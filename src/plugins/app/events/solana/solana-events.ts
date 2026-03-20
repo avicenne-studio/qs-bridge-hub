@@ -28,6 +28,7 @@ function buildOutboundPayload(event: OutboundEvent) {
     amount: event.amount.toString(),
     relayerFee: event.relayerFee.toString(),
     nonce: bytesToHex(event.nonce),
+    orderEra: event.orderEra,
   };
 }
 
@@ -50,6 +51,7 @@ function buildInboundPayload(event: InboundEvent) {
     amount: event.amount.toString(),
     relayerFee: event.relayerFee.toString(),
     nonce: bytesToHex(event.nonce),
+    orderEra: event.orderEra,
   };
 }
 
