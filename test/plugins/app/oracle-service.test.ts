@@ -47,6 +47,7 @@ function orderBase(overrides: Partial<OracleOrderWithSignature> = {}) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "pending",
     ...overrides,
   } satisfies OracleOrderWithSignature;
@@ -482,6 +483,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -530,6 +532,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -573,6 +576,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -617,6 +621,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -668,6 +673,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -916,6 +922,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -1004,6 +1011,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -1047,6 +1055,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "relayed",
       });
 
@@ -1090,6 +1099,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -1132,6 +1142,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 
@@ -1277,6 +1288,7 @@ describe("oracle service", () => {
         origin_trx_hash: "trx-hash",
         source_nonce: "nonce",
         source_payload: "{\"v\":1}",
+        order_era: 0,
         status: "pending",
       });
 

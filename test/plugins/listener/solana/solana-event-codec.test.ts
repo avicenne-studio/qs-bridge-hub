@@ -8,6 +8,7 @@ describe("solana event codecs", () => {
   it("encodes and decodes outbound events", () => {
     const codec = getOutboundEventCodec();
     const bytes = codec.encode({
+      discriminator: 1,
       networkIn: 1,
       networkOut: 2,
       tokenIn: BYTES32(1),
@@ -17,6 +18,7 @@ describe("solana event codecs", () => {
       amount: 10n,
       relayerFee: 2n,
       nonce: BYTES32(5),
+      orderEra: 0,
     });
     const decoded = codec.decode(bytes);
     assert.strictEqual(decoded.networkIn, 1);
@@ -27,6 +29,7 @@ describe("solana event codecs", () => {
   it("encodes and decodes override outbound events", () => {
     const codec = getOverrideOutboundEventCodec();
     const bytes = codec.encode({
+      discriminator: 2,
       toAddress: BYTES32(9),
       relayerFee: 7n,
       nonce: BYTES32(8),

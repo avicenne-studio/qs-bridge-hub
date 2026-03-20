@@ -17,6 +17,7 @@ const baseOrder: Omit<OracleOrder, "status"> = {
   origin_trx_hash: "trx-hash",
   source_nonce: "nonce",
   source_payload: "{\"v\":1}",
+  order_era: 0,
 };
 
 describe("oracleOrdersReconciliatior plugin", () => {

@@ -21,6 +21,7 @@ function createOutboundEvent() {
     amount: 10n,
     relayerFee: 2n,
     nonce: NONCE(1),
+    orderEra: 0,
   };
 }
 
@@ -45,6 +46,7 @@ function createInboundEvent() {
     amount: 10n,
     relayerFee: 2n,
     nonce: NONCE(3),
+    orderEra: 0,
   };
 }
 

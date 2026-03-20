@@ -18,6 +18,7 @@ function createOutboundPayload(seed: number) {
     amount: "10",
     relayerFee: "2",
     nonce: hex32(seed + 4),
+    orderEra: 0,
   };
 }
 

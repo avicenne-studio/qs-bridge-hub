@@ -27,6 +27,7 @@ async function seedEvents(app: Awaited<ReturnType<typeof build>>) {
       amount: "10",
       relayerFee: "2",
       nonce: hex32(1),
+      orderEra: 0,
     },
   });
   await eventsRepository.create({

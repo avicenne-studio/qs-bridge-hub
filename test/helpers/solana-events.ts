@@ -36,6 +36,7 @@ export function createOutboundEventBytes(nonce: Uint8Array = NONCE(1)): Uint8Arr
       amount: 10n,
       relayerFee: 2n,
       nonce,
+      orderEra: 0,
     })
   );
 }
@@ -64,6 +65,7 @@ export function createInboundEventBytes(nonce: Uint8Array = NONCE(1)): Uint8Arra
       amount: 10n,
       relayerFee: 2n,
       nonce,
+      orderEra: 0,
     })
   );
 }
@@ -78,6 +80,7 @@ export function createEventBytes(
         ...BASE_EVENT_DATA,
         networkOut: 1,
         nonce: NONCE(1),
+        orderEra: 0,
       })
     );
   }
@@ -96,6 +99,7 @@ export function createEventBytes(
       discriminator: 0,
       ...BASE_EVENT_DATA,
       nonce: NONCE(3),
+      orderEra: 0,
     })
   );
 }
