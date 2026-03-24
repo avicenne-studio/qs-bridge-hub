@@ -1029,6 +1029,77 @@ describe("oracle service", () => {
       await handle.stop();
     });
 
+    test("logs when reconciliation fails for mismatched order_era", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending", { order_era: 0 }),
+          serverOrderFactory("sig-2", "pending", { order_era: 1 }),
+          serverOrderFactory("sig-3", "pending", { order_era: 0 }),
+        ],
+        orderIds: [makeId(205)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+      await ordersRepository.create({
+        id: makeId(205),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        order_era: 0,
+        status: "pending",
+      });
+
+      const warnMock = mockLogMethod(t, app.log, "warn");
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(() =>
+        warnMock.calls.some(
+          (call) =>
+            call.arguments[1] === "oracle orders reconciliation failed"
+        )
+      );
+
+      await handle.stop();
+    });
+
+    test("preserves order_era through oracle consensus when creating a new order", async (t: TestContext) => {
+      const orderId = makeId(206);
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "pending", { order_era: 3 }),
+          serverOrderFactory("sig-2", "pending", { order_era: 3 }),
+          serverOrderFactory("sig-3", "pending", { order_era: 3 }),
+        ],
+        orderIds: [orderId],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const created = await ordersRepository.findById(orderId);
+        return created !== null;
+      }, 10_000);
+
+      await handle.stop();
+
+      const created = await ordersRepository.findById(orderId);
+      t.assert.strictEqual(created?.order_era, 3);
+    });
+
     test("propagates destination_trx_hash to hub during finalization", async (t: TestContext) => {
       const txHash = "dest-tx-hash-abc123";
       await setupThreeOrderServers(t, {

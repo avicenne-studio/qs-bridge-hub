@@ -91,7 +91,8 @@ function computeConsensus(orders: OracleOrder[]) {
       order.dest !== first.dest ||
       order.from !== first.from ||
       order.amount !== first.amount ||
-      order.origin_trx_hash !== first.origin_trx_hash
+      order.origin_trx_hash !== first.origin_trx_hash ||
+      order.order_era !== first.order_era
     ) {
       throw new Error("Orders to reconcile must be identical");
     }
