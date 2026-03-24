@@ -84,6 +84,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "destination_trx_hash",
           "source_nonce",
           "source_payload",
+          "order_era",
           "failure_reason_public",
           "status"
         )
@@ -160,6 +161,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "destination_trx_hash",
           "source_nonce",
           "source_payload",
+          "order_era",
           "failure_reason_public",
           "status"
         )
@@ -182,6 +184,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "destination_trx_hash",
           "source_nonce",
           "source_payload",
+          "order_era",
           "failure_reason_public",
           "status"
         )
@@ -216,6 +219,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "orders.destination_trx_hash",
           "orders.source_nonce",
           "orders.source_payload",
+          "orders.order_era",
           "orders.failure_reason_public",
           "orders.status",
           "signatures.id as signature_id",
@@ -354,6 +358,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "destination_trx_hash",
           "source_nonce",
           "source_payload",
+          "order_era",
           "status"
         )
         .whereIn("id", ids)

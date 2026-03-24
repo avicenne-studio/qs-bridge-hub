@@ -13,8 +13,8 @@ import {
 } from "../../../../clients/js/types/overrideOutboundEvent.js";
 
 export const LOG_PREFIX = "Program data: ";
-export const INBOUND_EVENT_SIZE = 185;
-export const OUTBOUND_EVENT_SIZE = 185;
+export const INBOUND_EVENT_SIZE = 189;
+export const OUTBOUND_EVENT_SIZE = 189;
 export const OVERRIDE_OUTBOUND_EVENT_SIZE = 73;
 const INBOUND_DISCRIMINATOR = 0;
 const OUTBOUND_DISCRIMINATOR = 1;

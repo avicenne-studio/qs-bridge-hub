@@ -23,6 +23,7 @@ function createQubicEvent(overrides: Partial<QubicEvent> = {}): QubicEvent {
       amount: "10",
       relayerFee: "1",
       nonce: "1",
+      orderEra: "0",
     },
     trxHash: "trx-1",
     ...overrides,

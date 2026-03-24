@@ -28,6 +28,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "pending",
   });
   await ordersRepository.create({
@@ -41,6 +42,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "finalized",
   });
 }
@@ -167,6 +169,7 @@ test("GET /api/orders filters by created_after and created_before", async (t: Te
     origin_trx_hash: "tx",
     source_nonce: "n",
     source_payload: "{}",
+    order_era: 0,
     status: "pending" as const,
   };
   await knex(ORDERS_TABLE_NAME).insert([
@@ -242,6 +245,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "ready-for-relay",
   });
   const second = await ordersRepository.create({
@@ -255,6 +259,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "pending",
   });
   await ordersRepository.create({
@@ -268,6 +273,7 @@ test("GET /api/orders/signatures returns stored signatures", async (t: TestConte
     origin_trx_hash: "trx-hash",
     source_nonce: "nonce",
     source_payload: "{\"v\":1}",
+    order_era: 0,
     status: "finalized",
   });
 

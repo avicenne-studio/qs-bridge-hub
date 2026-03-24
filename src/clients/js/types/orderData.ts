@@ -34,6 +34,7 @@ export type OrderData = {
   amount: bigint;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export type OrderDataArgs = {
@@ -46,6 +47,7 @@ export type OrderDataArgs = {
   amount: number | bigint;
   relayerFee: number | bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
 };
 
 export function getOrderDataEncoder(): FixedSizeEncoder<OrderDataArgs> {
@@ -59,6 +61,7 @@ export function getOrderDataEncoder(): FixedSizeEncoder<OrderDataArgs> {
     ["amount", getU64Encoder()],
     ["relayerFee", getU64Encoder()],
     ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
+    ["orderEra", getU32Encoder()],
   ]);
 }
 
@@ -73,6 +76,7 @@ export function getOrderDataDecoder(): FixedSizeDecoder<OrderData> {
     ["amount", getU64Decoder()],
     ["relayerFee", getU64Decoder()],
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],
+    ["orderEra", getU32Decoder()],
   ]);
 }
 

@@ -32,6 +32,7 @@ export const OracleOrderSchema = Type.Object({
   ),
   source_nonce: StringSchema,
   source_payload: SourcePayloadSchema,
+  order_era: Type.Integer({ minimum: 0 }),
   failure_reason_public: Type.Optional(Type.String({ maxLength: 255 })),
   status: OracleOrderStatus,
 });

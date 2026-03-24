@@ -70,6 +70,7 @@ const HUB_ORDER_FIELDS = [
   "destination_trx_hash",
   "source_nonce",
   "source_payload",
+  "order_era",
   "failure_reason_public",
   "status",
 ] as const;

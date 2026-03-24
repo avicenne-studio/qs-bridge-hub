@@ -50,6 +50,7 @@ export type OutboundOrder = {
   amount: bigint;
   relayerFee: bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
   bump: number;
 };
 
@@ -64,6 +65,7 @@ export type OutboundOrderArgs = {
   amount: number | bigint;
   relayerFee: number | bigint;
   nonce: ReadonlyUint8Array;
+  orderEra: number;
   bump: number;
 };
 
@@ -80,6 +82,7 @@ export function getOutboundOrderEncoder(): FixedSizeEncoder<OutboundOrderArgs> {
     ["amount", getU64Encoder()],
     ["relayerFee", getU64Encoder()],
     ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
+    ["orderEra", getU32Encoder()],
     ["bump", getU8Encoder()],
   ]);
 }
@@ -97,6 +100,7 @@ export function getOutboundOrderDecoder(): FixedSizeDecoder<OutboundOrder> {
     ["amount", getU64Decoder()],
     ["relayerFee", getU64Decoder()],
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],
+    ["orderEra", getU32Decoder()],
     ["bump", getU8Decoder()],
   ]);
 }
@@ -167,5 +171,5 @@ export async function fetchAllMaybeOutboundOrder(
 }
 
 export function getOutboundOrderSize(): number {
-  return 186;
+  return 190;
 }

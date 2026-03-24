@@ -46,6 +46,7 @@ describe("qubic event handlers", () => {
         amount: "10",
         relayerFee: "1",
         nonce: "1",
+        orderEra: "0",
       },
     });
 
@@ -72,6 +73,7 @@ describe("qubic event handlers", () => {
         amount: "10",
         relayerFee: "1",
         nonce: "2",
+        orderEra: "0",
       },
     });
 

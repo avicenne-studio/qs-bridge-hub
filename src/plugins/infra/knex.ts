@@ -58,6 +58,7 @@ export default fp(
           table.string("destination_trx_hash", 255).nullable();
           table.string("source_nonce").notNullable();
           table.text("source_payload").notNullable();
+          table.integer("order_era").notNullable().defaultTo(0);
           table.string("failure_reason_public").nullable();
           table.string("status").notNullable().defaultTo("pending");
           table
