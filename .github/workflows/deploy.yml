@@ -1,0 +1,81 @@
+name: Deploy Hub
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main, dev]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-push:
+    if: ${{ (github.event_name == 'workflow_dispatch' && (github.ref_name == 'main' || github.ref_name == 'dev')) || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    outputs:
+      workspace: ${{ steps.env.outputs.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve workspace
+        id: env
+        run: |
+          BRANCH=${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "workspace=production" >> $GITHUB_OUTPUT
+
+          elif [[ "$BRANCH" == "dev" ]]; then
+            echo "workspace=development" >> $GITHUB_OUTPUT
+
+          else
+            echo "Unsupported branch: $BRANCH" >&2
+            exit 1
+          fi
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: production
+          push: true
+          tags: |
+            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/hub:${{ github.sha }}
+            ${{ secrets.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ steps.env.outputs.workspace }}/hub:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  trigger-deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Dispatch deploy to infrastructure repo
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.INFRA_GITHUB_PAT }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'avicenne-studio',
+              repo: 'qs-bridge-infrastructure',
+              event_type: 'hub-deploy',
+              client_payload: {
+                workspace: '${{ needs.build-push.outputs.workspace }}'
+              }
+            });
