@@ -8,7 +8,7 @@ import {
 } from "../../../plugins/app/oracle-service.js";
 
 const BridgeHealthResponseSchema = Type.Object({
-  paused: Type.Literal(true),
+  paused: Type.Boolean(),
 });
 
 const OracleHealthSchema = Type.Object({
@@ -39,7 +39,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      return { paused: true } as const;
+      return { paused: false };
     }
   );
 

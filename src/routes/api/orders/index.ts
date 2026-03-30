@@ -110,10 +110,19 @@ const OrdersQueryParamsSchema = Type.Object({
       examples: ["7b1d6f2c-7b4f-4bb8-8c53-0c1e87a1b2b1"],
     })
   ),
+  participant: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Filter orders where `from` or `to` matches any of the given addresses.",
+      examples: [["8axvTLqKVh7yqFr63Eo5g6ERzBbnGYEU2t4PKcGyYXSu"]],
+    })
+  ),
 });
 
 const StoredOrderSchema = Type.Intersect([
-  Type.Object({ id: IdSchema }),
+  Type.Object({
+    id: IdSchema,
+    created_at: Type.String({ format: "date-time" }),
+  }),
   OracleOrderSchema,
 ]);
 
@@ -229,6 +238,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
         created_after,
         created_before,
         id,
+        participant,
       } = request.query;
 
       try {
@@ -246,6 +256,7 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
           created_after,
           created_before,
           id,
+          participant,
         });
 
         return {

@@ -14,7 +14,7 @@ export interface OrdersRepository {
   findByOriginTrxHashWithSignatures(
     hash: string
   ): Promise<OrderWithSignatures | null>;
-  create(newOrder: StoredOrder): Promise<StoredOrder | null>;
+  create(newOrder: OracleOrder & { id: string }): Promise<StoredOrder | null>;
   update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
   delete(id: string): Promise<boolean>;
   findActivesIds(limit?: number): Promise<string[]>;
@@ -28,9 +28,9 @@ export interface OrdersRepository {
 
 export const kOrdersRepository = Symbol("app.ordersRepository");
 
-type PersistedOrder = OracleOrder & { id: string };
-export type StoredOrder = OracleOrder & { id: string };
-type CreateOrder = StoredOrder;
+type PersistedOrder = OracleOrder & { id: string; created_at: string };
+export type StoredOrder = OracleOrder & { id: string; created_at: string };
+type CreateOrder = OracleOrder & { id: string };
 type UpdateOrder = Partial<OracleOrder>;
 type PersistedSignature = {
   order_id: string;
@@ -53,6 +53,7 @@ export type OrderQuery = {
   created_after?: string;
   created_before?: string;
   id?: string;
+  participant?: string[];
 };
 
 type OrderWithTotal = StoredOrder & { total: number };
@@ -86,7 +87,8 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_payload",
           "order_era",
           "failure_reason_public",
-          "status"
+          "status",
+          "created_at"
         )
         .select(knex.raw("count(*) OVER() as total"));
 
@@ -130,10 +132,16 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         query.where({ id: q.id });
       }
 
+      if (q.participant && q.participant.length > 0) {
+        query.where(function () {
+          this.whereIn("from", q.participant!).orWhereIn("to", q.participant!);
+        });
+      }
+
       const rows = (await query
         .limit(q.limit)
         .offset(offset)
-        .orderBy("id", q.order)) as unknown as OrderWithTotal[];
+        .orderBy("created_at", q.order)) as unknown as OrderWithTotal[];
 
       const orders = rows.map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -163,7 +171,8 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_payload",
           "order_era",
           "failure_reason_public",
-          "status"
+          "status",
+          "created_at"
         )
         .where("id", id)
         .first();
@@ -186,7 +195,8 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_payload",
           "order_era",
           "failure_reason_public",
-          "status"
+          "status",
+          "created_at"
         )
         .where("origin_trx_hash", hash)
         .first();
@@ -222,6 +232,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "orders.order_era",
           "orders.failure_reason_public",
           "orders.status",
+          "orders.created_at",
           "signatures.id as signature_id",
           "signatures.order_id as signature_order_id",
           "signatures.signature as signature_value"
@@ -359,7 +370,9 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "source_nonce",
           "source_payload",
           "order_era",
-          "status"
+          "failure_reason_public",
+          "status",
+          "created_at"
         )
         .whereIn("id", ids)
         .orderBy("id", "asc");
