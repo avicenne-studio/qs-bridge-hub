@@ -149,6 +149,32 @@ test("GET /api/orders filters by id", async (t: TestContext) => {
   t.assert.strictEqual(body.data[0].from, "A");
 });
 
+test("GET /api/orders filters by participant (from OR to)", async (t: TestContext) => {
+  const app = await build(t);
+  await seedOrders(app);
+
+  // "A" is from of order 401, "D" is to of order 402 — both should match
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", participant: ["A", "D"] },
+  });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  t.assert.strictEqual(body.data.length, 2);
+
+  // single participant matches only one order
+  const resSingle = await app.inject({
+    method: "GET",
+    url: "/api/orders",
+    query: { page: "1", limit: "10", participant: ["B"] },
+  });
+  const bodySingle = JSON.parse(resSingle.payload);
+  t.assert.strictEqual(bodySingle.data.length, 1);
+  t.assert.strictEqual(bodySingle.data[0].to, "B");
+});
+
 test("GET /api/orders filters by created_after and created_before", async (t: TestContext) => {
   const app = await build(t);
   const knex = app.getDecorator<KnexAccessor>(kKnex).get();
