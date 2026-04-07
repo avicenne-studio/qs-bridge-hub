@@ -58,8 +58,12 @@ export type OrderQuery = {
 type OrderWithTotal = StoredOrder & { total: number };
 
 function normalizeStoredOrder(row: StoredOrder): StoredOrder {
+  const createdAt = row.created_at && !row.created_at.endsWith("Z")
+    ? `${row.created_at}Z`
+    : row.created_at;
   return {
     ...row,
+    created_at: createdAt,
     failure_reason_public: row.failure_reason_public ?? undefined,
   };
 }
