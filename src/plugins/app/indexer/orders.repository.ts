@@ -14,7 +14,7 @@ export interface OrdersRepository {
   findByOriginTrxHashWithSignatures(
     hash: string
   ): Promise<OrderWithSignatures | null>;
-  create(newOrder: OracleOrder & { id: string }): Promise<StoredOrder | null>;
+  create(newOrder: CreateOrder): Promise<StoredOrder | null>;
   update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
   delete(id: string): Promise<boolean>;
   findActivesIds(limit?: number): Promise<string[]>;
@@ -28,7 +28,6 @@ export interface OrdersRepository {
 
 export const kOrdersRepository = Symbol("app.ordersRepository");
 
-type PersistedOrder = OracleOrder & { id: string; created_at: string };
 export type StoredOrder = OracleOrder & { id: string; created_at: string };
 type CreateOrder = OracleOrder & { id: string };
 type UpdateOrder = Partial<OracleOrder>;
@@ -72,7 +71,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     async paginate(q: OrderQuery) {
       const offset = (q.page - 1) * q.limit;
 
-      const query = knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const query = knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select(
           "id",
           "source",
@@ -156,7 +155,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async findById(id: string) {
-      const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const row = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select(
           "id",
           "source",
@@ -180,7 +179,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async findByOriginTrxHash(hash: string) {
-      const row = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const row = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select(
           "id",
           "source",
@@ -277,7 +276,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       const sourcePayload =
         newOrder.source_payload ??
         JSON.stringify({ origin_trx_hash: newOrder.origin_trx_hash });
-      await knex<PersistedOrder>(ORDERS_TABLE_NAME).insert({
+      await knex<StoredOrder>(ORDERS_TABLE_NAME).insert({
         ...newOrder,
         source_nonce: sourceNonce,
         source_payload: sourcePayload,
@@ -286,7 +285,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async update(id: string, changes: UpdateOrder) {
-      const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const affectedRows = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .where("id", id)
         .update(changes);
 
@@ -298,7 +297,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async delete(id: string) {
-      const affectedRows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const affectedRows = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .where("id", id)
         .delete();
 
@@ -306,7 +305,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async findActivesIds(limit = 100) {
-      const rows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const rows = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select("id")
         .whereIn("status", ["pending", "ready-for-relay", "relayed"])
         .orderBy("id", "asc")
@@ -316,7 +315,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
     },
 
     async findRelayableIds(limit = 100) {
-      const rows = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const rows = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select("id")
         .where({ status: "ready-for-relay" })
         .orderBy("id", "asc")
@@ -356,7 +355,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
         return [];
       }
 
-      const orders = await knex<PersistedOrder>(ORDERS_TABLE_NAME)
+      const orders = await knex<StoredOrder>(ORDERS_TABLE_NAME)
         .select(
           "id",
           "source",
