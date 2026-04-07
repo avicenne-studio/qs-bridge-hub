@@ -112,7 +112,7 @@ const OrdersQueryParamsSchema = Type.Object({
   ),
   participant: Type.Optional(
     Type.Array(Type.String(), {
-      maxItems: 10,
+      maxItems: 2,
       description: "Filter orders where `from` or `to` matches any of the given addresses.",
       examples: [["8axvTLqKVh7yqFr63Eo5g6ERzBbnGYEU2t4PKcGyYXSu"]],
     })
