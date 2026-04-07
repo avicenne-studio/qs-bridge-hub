@@ -16,6 +16,7 @@ import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
 export const BASE_FEE_LAMPORTS = 5_000;
 export const OUTBOUND_ORDER_RENT_LAMPORTS = 2_185_440;
 export const OUTBOUND_CU = 30_000;
+export const DEFAULT_PRIORITY_FEE_LAMPORTS = 50_000n;
 
 export const kSolanaCostsEstimation = Symbol("solana-costs-estimation");
 
@@ -60,7 +61,12 @@ export function createSolanaCostsEstimation(
 
   return {
     async estimateUserNetworkFee() {
-      const priorityFee = await getPriorityFeeForCu(OUTBOUND_CU);
+      let priorityFee = DEFAULT_PRIORITY_FEE_LAMPORTS;
+      try {
+        priorityFee = await getPriorityFeeForCu(OUTBOUND_CU);
+      } catch {
+        // getPriorityFeeEstimate may not be available (e.g. devnet)
+      }
       return (
         BigInt(BASE_FEE_LAMPORTS) +
         priorityFee +

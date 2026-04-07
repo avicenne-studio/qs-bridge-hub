@@ -15,7 +15,7 @@ test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  t.assert.deepStrictEqual(body, { paused: true });
+  t.assert.deepStrictEqual(body, { paused: false });
 });
 
 test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => {

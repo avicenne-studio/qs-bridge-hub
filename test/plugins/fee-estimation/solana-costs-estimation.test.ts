@@ -6,6 +6,7 @@ import {
   BASE_FEE_LAMPORTS,
   OUTBOUND_ORDER_RENT_LAMPORTS,
   OUTBOUND_CU,
+  DEFAULT_PRIORITY_FEE_LAMPORTS,
 } from "../../../src/plugins/app/fee-estimation/solana-costs-estimation.js";
 import { createTrackedServer } from "../../helpers/http-server.js";
 import { UndiciClient } from "../../../src/plugins/infra/undici-client.js";
@@ -90,11 +91,16 @@ describe("solana-costs-estimation", () => {
     t.assert.deepStrictEqual(keys, customKeys);
   });
 
-  it("rejects when priority fee call fails", async (t: TestContext) => {
+  it("falls back to default priority fee when rpc call fails", async (t: TestContext) => {
     const origin = await createRpcServer(t, {});
 
     const service = buildService(origin);
+    const fee = await service.estimateUserNetworkFee();
 
-    await t.assert.rejects(service.estimateUserNetworkFee(), /HTTP 400/);
+    const expected =
+      BigInt(BASE_FEE_LAMPORTS) +
+      DEFAULT_PRIORITY_FEE_LAMPORTS +
+      BigInt(OUTBOUND_ORDER_RENT_LAMPORTS);
+    t.assert.strictEqual(fee, expected);
   });
 });
