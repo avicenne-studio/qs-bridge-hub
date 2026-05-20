@@ -7,7 +7,7 @@ export type QubicEvent = {
   type: "lock" | "override-lock" | "unlock";
   nonce: string;
   payload: QubicEventPayload;
-  trxHash?: string;
+  orderHash: string;
 };
 
 type Logger = FastifyBaseLogger;
@@ -21,19 +21,15 @@ export function createQubicEventHandlers(deps: QubicEventDependencies) {
   const { eventsRepository, logger } = deps;
 
   const handleQubicEvent = async (event: QubicEvent) => {
-    if (!event.trxHash) {
-      logger.warn("Qubic event missing transaction hash");
-      return;
-    }
     await eventsRepository.create({
-      signature: event.trxHash,
+      signature: event.orderHash,
       slot: null,
       chain: "qubic",
       type: event.type,
       nonce: event.nonce,
       payload: event.payload,
     });
-    logger.info({ signature: event.trxHash }, "Qubic event stored");
+    logger.info({ signature: event.orderHash }, "Qubic event stored");
   };
 
   return { handleQubicEvent };

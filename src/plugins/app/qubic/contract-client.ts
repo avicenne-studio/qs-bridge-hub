@@ -1,0 +1,187 @@
+import { Buffer } from "node:buffer";
+
+const QSB_CONTRACT_INDEX = 28;
+const MAX_RETRIES = 20;
+const RETRY_DELAY_MS = 300;
+const LOCKED_ORDER_ENTRY_SIZE = 168;
+
+export const FUNC_GET_CONFIG = 1;
+export const FUNC_GET_LOCKED_ORDER = 4;
+export const FUNC_GET_ORACLES = 7;
+export const FUNC_GET_LOCKED_ORDERS = 9;
+export const FUNC_GET_FILLED_ORDERS = 10;
+
+export type LockedOrder = {
+  sender: Uint8Array;
+  amount: bigint;
+  relayerFee: bigint;
+  networkOut: number;
+  nonce: number;
+  toAddress: Uint8Array;
+  orderHash: Uint8Array;
+  lockEpoch: number;
+  orderEra: number;
+  active: boolean;
+};
+
+export type BridgeConfig = {
+  admin: Uint8Array;
+  protocolFeeRecipient: Uint8Array;
+  oracleFeeRecipient: Uint8Array;
+  bpsFee: number;
+  protocolFee: number;
+  oracleCount: number;
+  pauserCount: number;
+  oracleThreshold: number;
+  paused: boolean;
+  orderEra: number;
+};
+
+/** Encode GetLockedOrders_input / GetFilledOrders_input: offset + limit (u32 LE each), as hex. */
+export function encodePaginationInput(offset: number, limit: number): string {
+  const buf = Buffer.allocUnsafe(8);
+  buf.writeUInt32LE(offset >>> 0, 0);
+  buf.writeUInt32LE(limit >>> 0, 4);
+  return buf.toString("hex");
+}
+
+/**
+ * Query a QSB contract view function via Bob Node POST /querySmartContract.
+ * Retries up to MAX_RETRIES times on pending responses (300 ms between attempts).
+ * Returns the raw output as a hex string.
+ *
+ * Bob Node request body: { nonce, scIndex, funcNumber, data (hex) }
+ * Bob Node response: { data: string (hex) } | { error: "pending" }
+ */
+export async function queryContractFunction(
+  bobUrl: string,
+  funcNumber: number,
+  inputHex: string,
+): Promise<string> {
+  const nonce = (Math.random() * 0xffffffff) >>> 0;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+    const res = await fetch(`${bobUrl}/querySmartContract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nonce, scIndex: QSB_CONTRACT_INDEX, funcNumber, data: inputHex }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`querySmartContract HTTP ${res.status}: ${text}`);
+    }
+    const body = (await res.json()) as { error?: string; data?: unknown };
+    if (body.error === "pending") continue;
+    if (typeof body.data !== "string") {
+      throw new Error(`querySmartContract: unexpected response: ${JSON.stringify(body)}`);
+    }
+    return body.data;
+  }
+  throw new Error(`querySmartContract func=${funcNumber}: still pending after ${MAX_RETRIES} retries`);
+}
+
+/**
+ * Decode a LockedOrderEntry (168 bytes) at `offset` within `buf`.
+ *
+ * Layout (packed, natural C++ alignment, LE):
+ *   [+0..+31]   id        sender
+ *   [+32..+39]  u64       amount
+ *   [+40..+47]  u64       relayerFee
+ *   [+48..+51]  u32       networkOut
+ *   [+52..+55]  u32       nonce
+ *   [+56..+119] u8[64]    toAddress (ASCII Solana address, zero-padded)
+ *   [+120..+151] u8[32]   orderHash (K12 digest)
+ *   [+152..+155] u32      lockEpoch
+ *   [+156..+159] u32      orderEra
+ *   [+160]      bit       active (1 byte)
+ *   [+161..+167] --       7 bytes padding
+ */
+function decodeLockedOrderEntry(buf: Buffer, offset: number): LockedOrder {
+  return {
+    sender: new Uint8Array(buf.subarray(offset, offset + 32)),
+    amount: buf.readBigUInt64LE(offset + 32),
+    relayerFee: buf.readBigUInt64LE(offset + 40),
+    networkOut: buf.readUInt32LE(offset + 48),
+    nonce: buf.readUInt32LE(offset + 52),
+    toAddress: new Uint8Array(buf.subarray(offset + 56, offset + 120)),
+    orderHash: new Uint8Array(buf.subarray(offset + 120, offset + 152)),
+    lockEpoch: buf.readUInt32LE(offset + 152),
+    orderEra: buf.readUInt32LE(offset + 156),
+    active: buf.readUInt8(offset + 160) !== 0,
+  };
+}
+
+/**
+ * Decode GetLockedOrders_output.
+ *
+ * Layout: u32 totalActive + u32 returned + Array<LockedOrderEntry(168), 64>
+ */
+export function decodeGetLockedOrders(hex: string): {
+  totalActive: number;
+  returned: number;
+  entries: LockedOrder[];
+} {
+  const buf = Buffer.from(hex, "hex");
+  const totalActive = buf.readUInt32LE(0);
+  const returned = buf.readUInt32LE(4);
+  const entries: LockedOrder[] = [];
+  for (let i = 0; i < returned; i++) {
+    entries.push(decodeLockedOrderEntry(buf, 8 + i * LOCKED_ORDER_ENTRY_SIZE));
+  }
+  return { totalActive, returned, entries };
+}
+
+/**
+ * Decode GetFilledOrders_output.
+ *
+ * Layout: u32 totalActive + u32 returned + Array<OrderHash(32), 64>
+ * Each hash is a 32-byte K12 digest.
+ */
+export function decodeGetFilledOrders(hex: string): {
+  totalActive: number;
+  returned: number;
+  hashes: Uint8Array[];
+} {
+  const buf = Buffer.from(hex, "hex");
+  const totalActive = buf.readUInt32LE(0);
+  const returned = buf.readUInt32LE(4);
+  const hashes: Uint8Array[] = [];
+  for (let i = 0; i < returned; i++) {
+    hashes.push(new Uint8Array(buf.subarray(8 + i * 32, 8 + (i + 1) * 32)));
+  }
+  return { totalActive, returned, hashes };
+}
+
+/**
+ * Decode GetConfig_output (120 bytes).
+ *
+ * Layout (packed, natural C++ alignment, LE):
+ *   [0..31]    id    admin
+ *   [32..63]   id    protocolFeeRecipient
+ *   [64..95]   id    oracleFeeRecipient
+ *   [96..99]   u32   bpsFee
+ *   [100..103] u32   protocolFee
+ *   [104..107] u32   oracleCount
+ *   [108..111] u32   pauserCount
+ *   [112]      u8    oracleThreshold
+ *   [113]      bit   paused (1 byte, non-zero = true)
+ *   [114..115] --    2 bytes padding (align u32)
+ *   [116..119] u32   orderEra
+ */
+export function decodeGetConfig(hex: string): BridgeConfig {
+  const buf = Buffer.from(hex, "hex");
+  return {
+    admin: new Uint8Array(buf.subarray(0, 32)),
+    protocolFeeRecipient: new Uint8Array(buf.subarray(32, 64)),
+    oracleFeeRecipient: new Uint8Array(buf.subarray(64, 96)),
+    bpsFee: buf.readUInt32LE(96),
+    protocolFee: buf.readUInt32LE(100),
+    oracleCount: buf.readUInt32LE(104),
+    pauserCount: buf.readUInt32LE(108),
+    oracleThreshold: buf.readUInt8(112),
+    paused: buf.readUInt8(113) !== 0,
+    orderEra: buf.readUInt32LE(116),
+  };
+}
