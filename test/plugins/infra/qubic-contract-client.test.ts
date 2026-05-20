@@ -238,4 +238,19 @@ describe("queryContractFunction", () => {
       /unexpected response/,
     );
   });
+
+  it("re-throws non-HTTP errors unchanged", async (t) => {
+    const server = Fastify({ logger: false });
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    const addr = server.server.address() as import("node:net").AddressInfo;
+    const url = `http://127.0.0.1:${addr.port}`;
+    await server.close();
+
+    const client = new UndiciClient();
+    t.after(() => client.close());
+    await assert.rejects(
+      () => createQubicContractClient(client, url).queryContractFunction(FUNC_GET_CONFIG, ""),
+      (err: Error) => !err.message.startsWith("querySmartContract HTTP"),
+    );
+  });
 });
