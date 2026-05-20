@@ -15,55 +15,102 @@ import { mockLogMethod } from "../../../helpers/mocks/logger.js";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/** Build a LockedOrderEntry (168 bytes) at a buffer offset. */
-function writeLockedOrderEntry(
-  buf: Buffer,
-  offset: number,
-  opts: { nonce: number; orderHash: Uint8Array; active?: boolean },
-) {
-  // sender (32B) — leave as zeros
-  // amount (8B)
-  buf.writeBigUInt64LE(1000n, offset + 32);
-  // relayerFee (8B)
-  buf.writeBigUInt64LE(10n, offset + 40);
-  // networkOut (4B)
-  buf.writeUInt32LE(2, offset + 48);
-  // nonce (4B)
-  buf.writeUInt32LE(opts.nonce, offset + 52);
-  // toAddress (64B ASCII)
-  buf.write("SolAddr", offset + 56, "ascii");
-  // orderHash (32B)
-  buf.set(opts.orderHash, offset + 120);
-  // lockEpoch (4B)
-  buf.writeUInt32LE(1, offset + 152);
-  // orderEra (4B)
-  buf.writeUInt32LE(0, offset + 156);
-  // active (1B)
-  buf.writeUInt8(opts.active !== false ? 1 : 0, offset + 160);
-}
+// Mirrored from qubic-contract-client.ts (private constants)
+const QSB_LOG_LOCK = 1;
+const QSB_LOG_OVERRIDE_LOCK = 2;
+const QSB_LOG_UNLOCK = 3;
+const CONTRACT_INFO_LOG_TYPE = 6;
+const QSB_CONTRACT_INDEX = 28;
 
-/** Build a hex-encoded GetLockedOrders_output with a single active entry. */
-function buildGetLockedOrdersHex(
-  entries: Array<{ nonce: number; orderHash: Uint8Array; active?: boolean }>,
-): string {
-  const buf = Buffer.alloc(8 + 64 * 168);
-  buf.writeUInt32LE(entries.length, 0); // totalActive
-  buf.writeUInt32LE(entries.length, 4); // returned
-  for (let i = 0; i < entries.length; i++) {
-    writeLockedOrderEntry(buf, 8 + i * 168, entries[i]);
-  }
+/**
+ * Build a lock/override-lock log content buffer (160B, header already stripped by Bob).
+ *
+ * Layout mirrors QSBLogLockMessage offset +8:
+ *   [0..31]    fromAddress  [32..95]  toAddress (ASCII)
+ *   [96..103]  amount       [104..111] relayerFee
+ *   [112..115] networkOut   [116..119] nonce
+ *   [120..151] orderHash    [152] success  [153] reasonCode  [154..155] pad
+ *   [156..159] orderEra
+ */
+function buildLockLogContent(opts: {
+  nonce: number;
+  orderHash: Uint8Array;
+  fromAddress?: Uint8Array;
+  toAddress?: string;
+  amount?: bigint;
+  relayerFee?: bigint;
+  networkOut?: number;
+  success?: boolean;
+  orderEra?: number;
+}): string {
+  const buf = Buffer.alloc(160);
+  buf.set(opts.fromAddress ?? new Uint8Array(32), 0);
+  buf.write(opts.toAddress ?? "SolAddr", 32, "ascii");
+  buf.writeBigUInt64LE(opts.amount ?? 1000n, 96);
+  buf.writeBigUInt64LE(opts.relayerFee ?? 10n, 104);
+  buf.writeUInt32LE(opts.networkOut ?? 2, 112);
+  buf.writeUInt32LE(opts.nonce, 116);
+  buf.set(opts.orderHash, 120);
+  buf.writeUInt8(opts.success !== false ? 1 : 0, 152);
+  buf.writeUInt32LE(opts.orderEra ?? 0, 156);
   return buf.toString("hex");
 }
 
-/** HTTP handler that returns a GetLockedOrders contract response. */
-function contractJsonHandler(responseHex: string): RequestListener {
-  return (_req, res) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ data: responseHex }));
+/**
+ * Build an unlock log content buffer (120B, header already stripped by Bob).
+ *
+ * Layout mirrors QSBLogUnlockMessage offset +8:
+ *   [0..31]  orderHash   [32..63]  toAddress (Qubic addr)
+ *   [64..71] amount      [72..79]  relayerFee
+ *   [80..111] relayer    [112] success  [113] reasonCode  [114..115] pad
+ *   [116..119] orderEra
+ */
+function buildUnlockLogContent(opts: {
+  orderHash: Uint8Array;
+  toAddress?: Uint8Array;
+  amount?: bigint;
+  relayerFee?: bigint;
+  relayer?: Uint8Array;
+  success?: boolean;
+  orderEra?: number;
+}): string {
+  const buf = Buffer.alloc(120);
+  buf.set(opts.orderHash, 0);
+  buf.set(opts.toAddress ?? new Uint8Array(32), 32);
+  buf.writeBigUInt64LE(opts.amount ?? 1000n, 64);
+  buf.writeBigUInt64LE(opts.relayerFee ?? 10n, 72);
+  buf.set(opts.relayer ?? new Uint8Array(32), 80);
+  buf.writeUInt8(opts.success !== false ? 1 : 0, 112);
+  buf.writeUInt32LE(opts.orderEra ?? 0, 116);
+  return buf.toString("hex");
+}
+
+function buildBobEntry(logId: number, epoch: number, tick: number, scLogType: number, content: string) {
+  return {
+    ok: true,
+    type: CONTRACT_INFO_LOG_TYPE,
+    epoch,
+    tick,
+    logId,
+    body: { scIndex: QSB_CONTRACT_INDEX, scLogType, content },
   };
 }
 
-async function createContractServer(t: TestContext, handler: RequestListener) {
+/** Bob Node handler: /status returns the epoch; /log/... returns entries only for from=0. */
+function makeBobHandler(entries: unknown[], epoch = 1): RequestListener {
+  return (req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    if (req.url === "/status") {
+      res.end(JSON.stringify({ currentProcessingEpoch: epoch }));
+      return;
+    }
+    const match = /^\/log\/\d+\/(\d+)\//.exec(req.url ?? "");
+    const from = match ? parseInt(match[1], 10) : 1;
+    res.end(JSON.stringify(from === 0 ? entries : []));
+  };
+}
+
+async function createBobServer(t: TestContext, handler: RequestListener) {
   const server = createTrackedServer(handler);
   await new Promise<void>((resolve) => server.server.listen(0, resolve));
   t.after(() => server.close());
@@ -79,12 +126,12 @@ const BASE_CONFIG = {
 
 async function buildApp(
   t: TestContext,
-  rpcUrl: string,
+  bobUrl: string,
   eventsRepo = createInMemoryEventsRepository(),
   opts: {
     enabled?: boolean;
     decorators?: Record<PropertyKey, unknown>;
-    config?: Partial<typeof BASE_CONFIG> & { QUBIC_RPC_URL?: string };
+    config?: Partial<typeof BASE_CONFIG> & { QUBIC_BOB_URL?: string };
   } = {},
 ) {
   const app = await build(t, {
@@ -93,7 +140,7 @@ async function buildApp(
       ...BASE_CONFIG,
       ...opts.config,
       QUBIC_POLLER_ENABLED: opts.enabled ?? BASE_CONFIG.QUBIC_POLLER_ENABLED,
-      QUBIC_RPC_URL: opts.config?.QUBIC_RPC_URL ?? rpcUrl,
+      QUBIC_BOB_URL: opts.config?.QUBIC_BOB_URL ?? bobUrl,
     },
     decorators: {
       [kEventsRepository]: eventsRepo,
@@ -107,12 +154,13 @@ async function buildApp(
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 describe("qubic poller plugin", () => {
-  it("stores lock events decoded from GetLockedOrders", async (t: TestContext) => {
+  it("stores lock event decoded from Bob Node log", async (t: TestContext) => {
     const hash = new Uint8Array(32).fill(0xab);
-    const responseHex = buildGetLockedOrdersHex([{ nonce: 1, orderHash: hash }]);
+    const content = buildLockLogContent({ nonce: 1, orderHash: hash });
+    const entry = buildBobEntry(0, 1, 100, QSB_LOG_LOCK, content);
     const expectedSig = Buffer.from(hash).toString("hex");
 
-    const { port } = await createContractServer(t, contractJsonHandler(responseHex));
+    const { port } = await createBobServer(t, makeBobHandler([entry]));
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
     await waitFor(() => eventsRepo.store.length >= 1);
@@ -120,13 +168,29 @@ describe("qubic poller plugin", () => {
     t.assert.strictEqual(eventsRepo.store[0].signature, expectedSig);
     t.assert.strictEqual(eventsRepo.store[0].chain, "qubic");
     t.assert.strictEqual(eventsRepo.store[0].type, "lock");
+    t.assert.strictEqual(eventsRepo.store[0].nonce, "1");
   });
 
-  it("skips inactive entries", async (t: TestContext) => {
-    const hash = new Uint8Array(32).fill(0xcc);
-    const responseHex = buildGetLockedOrdersHex([{ nonce: 2, orderHash: hash, active: false }]);
+  it("stores override-lock event from Bob Node log", async (t: TestContext) => {
+    const hash = new Uint8Array(32).fill(0xac);
+    const content = buildLockLogContent({ nonce: 2, orderHash: hash });
+    const entry = buildBobEntry(0, 1, 101, QSB_LOG_OVERRIDE_LOCK, content);
 
-    const { port } = await createContractServer(t, contractJsonHandler(responseHex));
+    const { port } = await createBobServer(t, makeBobHandler([entry]));
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    t.assert.strictEqual(eventsRepo.store[0].type, "override-lock");
+    t.assert.strictEqual(eventsRepo.store[0].chain, "qubic");
+  });
+
+  it("skips events with success=false", async (t: TestContext) => {
+    const hash = new Uint8Array(32).fill(0xcc);
+    const content = buildLockLogContent({ nonce: 3, orderHash: hash, success: false });
+    const entry = buildBobEntry(0, 1, 100, QSB_LOG_LOCK, content);
+
+    const { port } = await createBobServer(t, makeBobHandler([entry]));
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
     await new Promise((r) => setTimeout(r, 50));
@@ -136,10 +200,10 @@ describe("qubic poller plugin", () => {
 
   it("does nothing when QUBIC_POLLER_ENABLED is false", async (t: TestContext) => {
     let requestCount = 0;
-    const { port } = await createContractServer(t, (_req, res) => {
+    const { port } = await createBobServer(t, (req, res) => {
       requestCount++;
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ data: buildGetLockedOrdersHex([]) }));
+      res.end(JSON.stringify(req.url === "/status" ? { currentProcessingEpoch: 1 } : []));
     });
 
     await buildApp(t, `http://127.0.0.1:${port}`, undefined, { enabled: false });
@@ -149,21 +213,28 @@ describe("qubic poller plugin", () => {
     t.assert.strictEqual(requestCount, 0);
   });
 
-  it("does not duplicate events across multiple rounds", async (t: TestContext) => {
-    let requestCount = 0;
+  it("does not duplicate lock events across multiple rounds", async (t: TestContext) => {
+    let logRequestCount = 0;
     const hash = new Uint8Array(32).fill(0xdd);
-    const responseHex = buildGetLockedOrdersHex([{ nonce: 3, orderHash: hash }]);
+    const content = buildLockLogContent({ nonce: 4, orderHash: hash });
+    const entry = buildBobEntry(0, 1, 100, QSB_LOG_LOCK, content);
     const expectedSig = Buffer.from(hash).toString("hex");
 
-    const { port } = await createContractServer(t, (_req, res) => {
-      requestCount++;
+    const { port } = await createBobServer(t, (req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ data: responseHex }));
+      if (req.url === "/status") {
+        res.end(JSON.stringify({ currentProcessingEpoch: 1 }));
+        return;
+      }
+      logRequestCount++;
+      const match = /^\/log\/\d+\/(\d+)\//.exec(req.url ?? "");
+      const from = match ? parseInt(match[1], 10) : 1;
+      res.end(JSON.stringify(from === 0 ? [entry] : []));
     });
 
     const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
 
-    await waitFor(() => requestCount >= 3);
+    await waitFor(() => logRequestCount >= 3);
 
     const matches = eventsRepo.store.filter((e) => e.signature === expectedSig);
     t.assert.strictEqual(matches.length, 1);
@@ -183,7 +254,7 @@ describe("qubic poller plugin", () => {
 
     await waitFor(() =>
       warnMock.calls.some(
-        (call) => call.arguments[1] === "qubic events poll failed",
+        (call: { arguments: unknown[] }) => call.arguments[1] === "qubic events poll failed",
       ),
     );
 
@@ -218,5 +289,68 @@ describe("qubic poller plugin", () => {
     await waitFor(() => eventsRepo.store.length >= 1);
 
     t.assert.strictEqual(eventsRepo.store[0].signature, orderHash);
+  });
+
+  it("stores unlock event from Bob Node log", async (t: TestContext) => {
+    const hash = new Uint8Array(32).fill(0xfa);
+    const expectedSig = Buffer.from(hash).toString("hex");
+    // Lock log populates orderHashToNonce map so unlock can recover the nonce.
+    const lockContent = buildLockLogContent({ nonce: 10, orderHash: hash });
+    const lockEntry = buildBobEntry(0, 1, 100, QSB_LOG_LOCK, lockContent);
+    const unlockContent = buildUnlockLogContent({ orderHash: hash });
+    const unlockEntry = buildBobEntry(1, 1, 101, QSB_LOG_UNLOCK, unlockContent);
+
+    const { port } = await createBobServer(t, makeBobHandler([lockEntry, unlockEntry]));
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.some((e) => e.type === "unlock"));
+
+    const unlockEvent = eventsRepo.store.find((e) => e.type === "unlock")!;
+    t.assert.strictEqual(unlockEvent.chain, "qubic");
+    t.assert.strictEqual(unlockEvent.signature, expectedSig);
+    t.assert.strictEqual(unlockEvent.nonce, "10");
+  });
+
+  it("stores unlock event with empty nonce when lock was not seen this session", async (t: TestContext) => {
+    const hash = new Uint8Array(32).fill(0xfb);
+    const expectedSig = Buffer.from(hash).toString("hex");
+    const unlockContent = buildUnlockLogContent({ orderHash: hash });
+    const unlockEntry = buildBobEntry(0, 1, 100, QSB_LOG_UNLOCK, unlockContent);
+
+    const { port } = await createBobServer(t, makeBobHandler([unlockEntry]));
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => eventsRepo.store.some((e) => e.type === "unlock"));
+
+    t.assert.strictEqual(eventsRepo.store[0].signature, expectedSig);
+    t.assert.strictEqual(eventsRepo.store[0].nonce, "");
+  });
+
+  it("does not duplicate unlock events across multiple rounds", async (t: TestContext) => {
+    let logRequestCount = 0;
+    const hash = new Uint8Array(32).fill(0xfc);
+    const lockContent = buildLockLogContent({ nonce: 11, orderHash: hash });
+    const lockEntry = buildBobEntry(0, 1, 100, QSB_LOG_LOCK, lockContent);
+    const unlockContent = buildUnlockLogContent({ orderHash: hash });
+    const unlockEntry = buildBobEntry(1, 1, 101, QSB_LOG_UNLOCK, unlockContent);
+
+    const { port } = await createBobServer(t, (req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.url === "/status") {
+        res.end(JSON.stringify({ currentProcessingEpoch: 1 }));
+        return;
+      }
+      logRequestCount++;
+      const match = /^\/log\/\d+\/(\d+)\//.exec(req.url ?? "");
+      const from = match ? parseInt(match[1], 10) : 2;
+      res.end(JSON.stringify(from === 0 ? [lockEntry, unlockEntry] : []));
+    });
+
+    const { eventsRepo } = await buildApp(t, `http://127.0.0.1:${port}`);
+
+    await waitFor(() => logRequestCount >= 3);
+
+    const unlockEvents = eventsRepo.store.filter((e) => e.type === "unlock");
+    t.assert.strictEqual(unlockEvents.length, 1);
   });
 });

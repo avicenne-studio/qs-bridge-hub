@@ -22,7 +22,7 @@ export type AppConfig = {
   HELIUS_POLLER_LOOKBACK_SECONDS: number;
   HELIUS_POLLER_TIMEOUT_MS: number;
   HELIUS_POLLER_RETRY_DELAY_MS: number;
-  QUBIC_RPC_URL: string;
+  QUBIC_BOB_URL: string;
   QUBIC_POLLER_ENABLED: boolean;
   QUBIC_POLLER_INTERVAL_MS: number;
   QUBIC_POLLER_TIMEOUT_MS: number;
@@ -54,7 +54,7 @@ const schema = {
     'HELIUS_POLLER_TIMEOUT_MS',
     'HELIUS_POLLER_RETRY_DELAY_MS',
     'TOKEN_MINT',
-    'QUBIC_RPC_URL',
+    'QUBIC_BOB_URL',
     'QUBIC_POLLER_ENABLED',
     'QUBIC_POLLER_INTERVAL_MS',
     'QUBIC_POLLER_TIMEOUT_MS'
@@ -147,7 +147,7 @@ const schema = {
       minimum: 0,
       default: 1000
     },
-    QUBIC_RPC_URL: {
+    QUBIC_BOB_URL: {
       type: 'string',
     },
     QUBIC_POLLER_ENABLED: {

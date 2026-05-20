@@ -12,9 +12,8 @@ import { createQubicEventHandlers } from "../../events/qubic/qubic-events.js";
 import {
   kQubicContractClient,
   type QubicContractClient,
-  decodeGetLockedOrders,
-  encodePaginationInput,
-  FUNC_GET_LOCKED_ORDERS,
+  type QubicLockLogData,
+  type QubicUnlockLogData,
 } from "../../../infra/qubic-contract-client.js";
 
 export type QubicEvent = {
@@ -29,35 +28,74 @@ export type QubicEventFetcher = (signal: AbortSignal) => Promise<QubicEvent[]>;
 
 export const kQubicEventFetcher = Symbol.for("qubicEventFetcher");
 
-const PAGE_LIMIT = 64;
+const BATCH_SIZE = 200;
 
-function lockedOrdersToEvents(entries: ReturnType<typeof decodeGetLockedOrders>["entries"]): QubicEvent[] {
-  return entries
-    .filter((entry) => entry.active)
-    .map((entry) => ({
-      chain: "qubic" as const,
-      type: "lock" as const,
-      nonce: entry.nonce.toString(),
-      orderHash: Buffer.from(entry.orderHash).toString("hex"),
-      payload: {
-        fromAddress: Buffer.from(entry.sender).toString("hex"),
-        toAddress: Buffer.from(entry.toAddress).toString("ascii").replace(/\0+$/u, ""),
-        amount: entry.amount.toString(),
-        relayerFee: entry.relayerFee.toString(),
-        nonce: entry.nonce.toString(),
-        orderEra: entry.orderEra.toString(),
-      },
-    }));
+function lockLogToQubicEvent(type: "lock" | "override-lock", data: QubicLockLogData): QubicEvent {
+  return {
+    chain: "qubic",
+    type,
+    nonce: data.nonce.toString(),
+    orderHash: Buffer.from(data.orderHash).toString("hex"),
+    payload: {
+      fromAddress: Buffer.from(data.fromAddress).toString("hex"),
+      toAddress: Buffer.from(data.toAddress).toString("ascii").replace(/\0+$/u, ""),
+      amount: data.amount.toString(),
+      relayerFee: data.relayerFee.toString(),
+      nonce: data.nonce.toString(),
+      orderEra: data.orderEra.toString(),
+    },
+  };
+}
+
+// Unlock logs carry no nonce — recover it from the lock event seen this session.
+// For cross-epoch orders (lock in a prior epoch), nonce falls back to "".
+function unlockLogToQubicEvent(data: QubicUnlockLogData, nonce: string): QubicEvent {
+  return {
+    chain: "qubic",
+    type: "unlock",
+    nonce,
+    orderHash: Buffer.from(data.orderHash).toString("hex"),
+    payload: {
+      toAddress: Buffer.from(data.toAddress).toString("hex"),
+      amount: data.amount.toString(),
+      nonce,
+    },
+  };
 }
 
 export function createDefaultQubicEventFetcher(contractClient: QubicContractClient): QubicEventFetcher {
+  // Maps orderHash hex → nonce string; populated from lock events seen this session
+  // so that unlock events (which carry no nonce) can be reconstructed correctly.
+  const orderHashToNonce = new Map<string, string>();
+  let lastLogId = -1;
+  let lastEpoch = -1;
+
   return async () => {
-    const hex = await contractClient.queryContractFunction(
-      FUNC_GET_LOCKED_ORDERS,
-      encodePaginationInput(0, PAGE_LIMIT),
-    );
-    const { entries } = decodeGetLockedOrders(hex);
-    return lockedOrdersToEvents(entries);
+    const { epoch } = await contractClient.getBobStatus();
+    if (epoch !== lastEpoch) {
+      lastEpoch = epoch;
+      lastLogId = -1;
+    }
+
+    const events: QubicEvent[] = [];
+    while (true) {
+      const entries = await contractClient.findEvents(epoch, lastLogId + 1, lastLogId + BATCH_SIZE);
+      for (const entry of entries) {
+        if (!entry.data.success) continue;
+        if (entry.type === "lock" || entry.type === "override-lock") {
+          const event = lockLogToQubicEvent(entry.type, entry.data);
+          orderHashToNonce.set(event.orderHash, event.nonce);
+          events.push(event);
+        } else if (entry.type === "unlock") {
+          const orderHashHex = Buffer.from(entry.data.orderHash).toString("hex");
+          events.push(unlockLogToQubicEvent(entry.data, orderHashToNonce.get(orderHashHex) ?? ""));
+        }
+      }
+      if (entries.length === 0) break;
+      lastLogId = Math.max(...entries.map((e) => e.logId));
+      if (entries.length < BATCH_SIZE) break;
+    }
+    return events;
   };
 }
 
@@ -80,8 +118,7 @@ export default fp(
       return;
     }
 
-    const eventsRepository =
-      fastify.getDecorator<EventsRepository>(kEventsRepository);
+    const eventsRepository = fastify.getDecorator<EventsRepository>(kEventsRepository);
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
     const contractClient = fastify.getDecorator<QubicContractClient>(kQubicContractClient);
 
@@ -92,7 +129,7 @@ export default fp(
       createDefaultQubicEventFetcher(contractClient),
     );
 
-    const filterNewEvents = async (items: QubicEvent[]) => {
+    const filterNewLockEvents = async (items: QubicEvent[]) => {
       const signatures = items.map((event) => event.orderHash);
       const existing = await eventsRepository.findExistingSignatures(signatures);
       const existingSet = new Set(existing);
@@ -100,7 +137,7 @@ export default fp(
     };
 
     const poller = pollerService.create<QubicEvent[]>({
-      servers: [config.QUBIC_RPC_URL],
+      servers: [config.QUBIC_BOB_URL],
       fetchOne: async (_server, signal) => {
         try {
           return await fetcher(signal);
@@ -110,9 +147,15 @@ export default fp(
         }
       },
       onRound: async ([events = []]) => {
-        const newEvents = await filterNewEvents(events);
-        if (newEvents.length === 0) return;
-        await Promise.allSettled(newEvents.map((event) => handleQubicEvent(event)));
+        // Unlock events share orderHash with lock events — must not go through filterNewLockEvents.
+        // The cursor in createDefaultQubicEventFetcher prevents re-emitting within a session;
+        // on restart the DB onConflict constraint deduplicates any replayed unlocks.
+        const lockEvents = events.filter((e) => e.type === "lock" || e.type === "override-lock");
+        const unlockEvents = events.filter((e) => e.type === "unlock");
+        const newLockEvents = await filterNewLockEvents(lockEvents);
+        const allNew = [...newLockEvents, ...unlockEvents];
+        if (allNew.length === 0) return;
+        await Promise.allSettled(allNew.map((event) => handleQubicEvent(event)));
       },
       logger: fastify.log,
       intervalMs: config.QUBIC_POLLER_INTERVAL_MS,

@@ -1,7 +1,12 @@
 import fp from "fastify-plugin";
 import { Buffer } from "node:buffer";
 import { FastifyInstance } from "fastify";
-import { kUndiciClient, UndiciClient, type UndiciClientService, HttpError } from "./undici-client.js";
+import {
+  kUndiciClient,
+  UndiciClient,
+  type UndiciClientService,
+  HttpError,
+} from "./undici-client.js";
 import { kConfig, type AppConfig } from "./env.js";
 
 const QSB_CONTRACT_INDEX = 28;
@@ -41,8 +46,46 @@ export type BridgeConfig = {
   orderEra: number;
 };
 
+export type QubicLockLogData = {
+  fromAddress: Uint8Array;
+  toAddress: Uint8Array;
+  amount: bigint;
+  relayerFee: bigint;
+  networkOut: number;
+  nonce: number;
+  orderHash: Uint8Array;
+  success: boolean;
+  orderEra: number;
+};
+
+export type QubicUnlockLogData = {
+  orderHash: Uint8Array;
+  toAddress: Uint8Array;
+  amount: bigint;
+  relayerFee: bigint;
+  relayer: Uint8Array;
+  success: boolean;
+  orderEra: number;
+};
+
+export type QubicLogEvent =
+  | { type: "lock"; logId: number; tick: number; data: QubicLockLogData }
+  | {
+      type: "override-lock";
+      logId: number;
+      tick: number;
+      data: QubicLockLogData;
+    }
+  | { type: "unlock"; logId: number; tick: number; data: QubicUnlockLogData };
+
 export type QubicContractClient = {
   queryContractFunction(funcNumber: number, inputHex: string): Promise<string>;
+  getBobStatus(): Promise<{ epoch: number; tick: number }>;
+  findEvents(
+    epoch: number,
+    fromLogId: number,
+    toLogId: number,
+  ): Promise<QubicLogEvent[]>;
 };
 
 export const kQubicContractClient = Symbol("infra.qubicContractClient");
@@ -129,14 +172,114 @@ export function decodeGetConfig(hex: string): BridgeConfig {
   };
 }
 
-export function createQubicContractClient(client: UndiciClient, bobUrl: string): QubicContractClient {
+// Bob stores LOG_INFO() as CONTRACT_INFORMATION_MESSAGE (type 6).
+const CONTRACT_INFO_LOG_TYPE = 6;
+const QSB_LOG_LOCK = 1;
+const QSB_LOG_OVERRIDE_LOCK = 2;
+const QSB_LOG_UNLOCK = 3;
+
+/**
+ * Lock/OverrideLock log content (160B, Bob strips the 8-byte header):
+ *   [0..31]    id      fromAddress
+ *   [32..95]   u8[64]  toAddress (Solana ASCII, zero-padded)
+ *   [96..103]  u64 LE  amount
+ *   [104..111] u64 LE  relayerFee
+ *   [112..115] u32 LE  networkOut
+ *   [116..119] u32 LE  nonce
+ *   [120..151] u8[32]  orderHash
+ *   [152]      u8      success
+ *   [153]      u8      reasonCode
+ *   [154..155] --      padding
+ *   [156..159] u32 LE  orderEra
+ */
+function parseLockLogContent(content: string): QubicLockLogData {
+  const buf = Buffer.from(content, "hex");
+  return {
+    fromAddress: new Uint8Array(buf.subarray(0, 32)),
+    toAddress: new Uint8Array(buf.subarray(32, 96)),
+    amount: buf.readBigUInt64LE(96),
+    relayerFee: buf.readBigUInt64LE(104),
+    networkOut: buf.readUInt32LE(112),
+    nonce: buf.readUInt32LE(116),
+    orderHash: new Uint8Array(buf.subarray(120, 152)),
+    success: buf.readUInt8(152) !== 0,
+    orderEra: buf.readUInt32LE(156),
+  };
+}
+
+/**
+ * Unlock log content (120B, Bob strips the 8-byte header):
+ *   [0..31]    u8[32]  orderHash
+ *   [32..63]   id      toAddress (Qubic recipient)
+ *   [64..71]   u64 LE  amount
+ *   [72..79]   u64 LE  relayerFee
+ *   [80..111]  id      relayer
+ *   [112]      u8      success
+ *   [113]      u8      reasonCode
+ *   [114..115] --      padding
+ *   [116..119] u32 LE  orderEra
+ */
+function parseUnlockLogContent(content: string): QubicUnlockLogData {
+  const buf = Buffer.from(content, "hex");
+  return {
+    orderHash: new Uint8Array(buf.subarray(0, 32)),
+    toAddress: new Uint8Array(buf.subarray(32, 64)),
+    amount: buf.readBigUInt64LE(64),
+    relayerFee: buf.readBigUInt64LE(72),
+    relayer: new Uint8Array(buf.subarray(80, 112)),
+    success: buf.readUInt8(112) !== 0,
+    orderEra: buf.readUInt32LE(116),
+  };
+}
+
+function parseQubicLogEntry(entry: unknown): QubicLogEvent | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const e = entry as Record<string, unknown>;
+  if (e.ok !== true || e.type !== CONTRACT_INFO_LOG_TYPE) return null;
+  const body = e.body as Record<string, unknown> | undefined;
+  if (
+    !body ||
+    body.scIndex !== QSB_CONTRACT_INDEX ||
+    typeof body.content !== "string"
+  )
+    return null;
+  const base = { logId: e.logId as number, tick: e.tick as number };
+  switch (body.scLogType) {
+    case QSB_LOG_LOCK:
+      return { ...base, type: "lock", data: parseLockLogContent(body.content) };
+    case QSB_LOG_OVERRIDE_LOCK:
+      return {
+        ...base,
+        type: "override-lock",
+        data: parseLockLogContent(body.content),
+      };
+    case QSB_LOG_UNLOCK:
+      return {
+        ...base,
+        type: "unlock",
+        data: parseUnlockLogContent(body.content),
+      };
+    default:
+      return null;
+  }
+}
+
+export function createQubicContractClient(
+  client: UndiciClient,
+  bobUrl: string,
+): QubicContractClient {
   const { origin } = new URL(bobUrl);
   return {
-    async queryContractFunction(funcNumber: number, inputHex: string): Promise<string> {
+    async queryContractFunction(
+      funcNumber: number,
+      inputHex: string,
+    ): Promise<string> {
       const nonce = (Math.random() * 0xffffffff) >>> 0;
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (attempt > 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, RETRY_DELAY_MS),
+          );
         }
         let body: { error?: string; data?: unknown };
         try {
@@ -147,17 +290,44 @@ export function createQubicContractClient(client: UndiciClient, bobUrl: string):
           );
         } catch (err) {
           if (err instanceof HttpError) {
-            throw new Error(`querySmartContract HTTP ${err.statusCode}: ${JSON.stringify(err.body)}`);
+            throw new Error(
+              `querySmartContract HTTP ${err.statusCode}: ${JSON.stringify(err.body)}`,
+            );
           }
           throw err;
         }
         if (body.error === "pending") continue; // Bob Node returns 200 { error: "pending" } until ready
         if (typeof body.data !== "string") {
-          throw new Error(`querySmartContract: unexpected response: ${JSON.stringify(body)}`);
+          throw new Error(
+            `querySmartContract: unexpected response: ${JSON.stringify(body)}`,
+          );
         }
         return body.data;
       }
-      throw new Error(`querySmartContract func=${funcNumber}: still pending after ${MAX_RETRIES} retries`);
+      throw new Error(
+        `querySmartContract func=${funcNumber}: still pending after ${MAX_RETRIES} retries`,
+      );
+    },
+
+    async getBobStatus() {
+      const body = await client.getJson<Record<string, unknown>>(
+        origin,
+        "/status",
+      );
+      return {
+        epoch: Number(body.currentProcessingEpoch ?? body.epoch ?? 0),
+        tick: Number(body.tick ?? 0),
+      };
+    },
+
+    async findEvents(epoch: number, fromLogId: number, toLogId: number) {
+      const entries = await client.getJson<unknown[]>(
+        origin,
+        `/log/${epoch}/${fromLogId}/${toLogId}`,
+      );
+      return entries
+        .map(parseQubicLogEntry)
+        .filter((e): e is QubicLogEvent => e !== null);
     },
   };
 }
@@ -165,8 +335,12 @@ export function createQubicContractClient(client: UndiciClient, bobUrl: string):
 export default fp(
   async function qubicContractClientPlugin(fastify: FastifyInstance) {
     const config = fastify.getDecorator<AppConfig>(kConfig);
-    const undiciService = fastify.getDecorator<UndiciClientService>(kUndiciClient);
-    fastify.decorate(kQubicContractClient, createQubicContractClient(undiciService.create(), config.QUBIC_RPC_URL));
+    const undiciService =
+      fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    fastify.decorate(
+      kQubicContractClient,
+      createQubicContractClient(undiciService.create(), config.QUBIC_BOB_URL),
+    );
   },
   {
     name: "qubic-contract-client",
