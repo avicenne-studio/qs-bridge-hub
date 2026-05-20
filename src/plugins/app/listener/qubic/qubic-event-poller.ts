@@ -10,11 +10,12 @@ import {
 } from "../../events/qubic/schemas/event.js";
 import { createQubicEventHandlers } from "../../events/qubic/qubic-events.js";
 import {
-  queryContractFunction,
+  kQubicContractClient,
+  type QubicContractClient,
   decodeGetLockedOrders,
   encodePaginationInput,
   FUNC_GET_LOCKED_ORDERS,
-} from "../../qubic/contract-client.js";
+} from "../../../infra/qubic-contract-client.js";
 
 export type QubicEvent = {
   chain: "qubic";
@@ -30,13 +31,7 @@ export const kQubicEventFetcher = Symbol.for("qubicEventFetcher");
 
 const PAGE_LIMIT = 64;
 
-/**
- * Map active LockedOrderEntry values decoded from GetLockedOrders to QubicEvent objects.
- * Uses the order hash (hex) as the stable identifier for deduplication.
- */
-function lockedOrdersToEvents(
-  entries: ReturnType<typeof decodeGetLockedOrders>["entries"],
-): QubicEvent[] {
+function lockedOrdersToEvents(entries: ReturnType<typeof decodeGetLockedOrders>["entries"]): QubicEvent[] {
   return entries
     .filter((entry) => entry.active)
     .map((entry) => ({
@@ -55,10 +50,9 @@ function lockedOrdersToEvents(
     }));
 }
 
-export function createDefaultQubicEventFetcher(bobUrl: string): QubicEventFetcher {
+export function createDefaultQubicEventFetcher(contractClient: QubicContractClient): QubicEventFetcher {
   return async () => {
-    const hex = await queryContractFunction(
-      bobUrl,
+    const hex = await contractClient.queryContractFunction(
       FUNC_GET_LOCKED_ORDERS,
       encodePaginationInput(0, PAGE_LIMIT),
     );
@@ -89,12 +83,13 @@ export default fp(
     const eventsRepository =
       fastify.getDecorator<EventsRepository>(kEventsRepository);
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
+    const contractClient = fastify.getDecorator<QubicContractClient>(kQubicContractClient);
 
     const { handleQubicEvent } =
       createQubicEventHandlers({ eventsRepository, logger: fastify.log });
 
     const fetcher = resolveQubicEventFetcher(fastify, () =>
-      createDefaultQubicEventFetcher(config.QUBIC_RPC_URL),
+      createDefaultQubicEventFetcher(contractClient),
     );
 
     const filterNewEvents = async (items: QubicEvent[]) => {
@@ -135,6 +130,7 @@ export default fp(
       "env",
       "events-repository",
       "polling",
+      "qubic-contract-client",
     ],
   },
 );

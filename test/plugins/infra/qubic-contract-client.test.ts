@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import Fastify from "fastify";
 
+import { UndiciClient } from "../../../src/plugins/infra/undici-client.js";
 import {
-  queryContractFunction,
+  createQubicContractClient,
   decodeGetLockedOrders,
   decodeGetFilledOrders,
   decodeGetConfig,
@@ -12,11 +13,8 @@ import {
   FUNC_GET_CONFIG,
   FUNC_GET_LOCKED_ORDERS,
   FUNC_GET_FILLED_ORDERS,
-} from "../../../src/plugins/app/qubic/contract-client.js";
+} from "../../../src/plugins/infra/qubic-contract-client.js";
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-/** Build a raw LockedOrderEntry buffer (168 bytes) with known values. */
 function buildLockedOrderEntryBuf(opts: {
   sender?: Uint8Array;
   amount?: bigint;
@@ -30,35 +28,23 @@ function buildLockedOrderEntryBuf(opts: {
   active?: boolean;
 } = {}): Buffer {
   const buf = Buffer.alloc(168);
-  const sender = opts.sender ?? new Uint8Array(32).fill(0xaa);
-  const amount = opts.amount ?? 1000n;
-  const relayerFee = opts.relayerFee ?? 10n;
-  const networkOut = opts.networkOut ?? 2;
-  const nonce = opts.nonce ?? 42;
-  const toAddrStr = opts.toAddress ?? "SolanaAddressHere";
-  const orderHash = opts.orderHash ?? new Uint8Array(32).fill(0xff);
-  const lockEpoch = opts.lockEpoch ?? 100;
-  const orderEra = opts.orderEra ?? 0;
-  const active = opts.active ?? true;
-
-  buf.set(sender, 0);
-  buf.writeBigUInt64LE(amount, 32);
-  buf.writeBigUInt64LE(relayerFee, 40);
-  buf.writeUInt32LE(networkOut, 48);
-  buf.writeUInt32LE(nonce, 52);
-  buf.write(toAddrStr.slice(0, 64), 56, "ascii");
-  buf.set(orderHash, 120);
-  buf.writeUInt32LE(lockEpoch, 152);
-  buf.writeUInt32LE(orderEra, 156);
-  buf.writeUInt8(active ? 1 : 0, 160);
+  buf.set(opts.sender ?? new Uint8Array(32).fill(0xaa), 0);
+  buf.writeBigUInt64LE(opts.amount ?? 1000n, 32);
+  buf.writeBigUInt64LE(opts.relayerFee ?? 10n, 40);
+  buf.writeUInt32LE(opts.networkOut ?? 2, 48);
+  buf.writeUInt32LE(opts.nonce ?? 42, 52);
+  buf.write((opts.toAddress ?? "SolanaAddressHere").slice(0, 64), 56, "ascii");
+  buf.set(opts.orderHash ?? new Uint8Array(32).fill(0xff), 120);
+  buf.writeUInt32LE(opts.lockEpoch ?? 100, 152);
+  buf.writeUInt32LE(opts.orderEra ?? 0, 156);
+  buf.writeUInt8(opts.active !== false ? 1 : 0, 160);
   return buf;
 }
 
-/** Start a Fastify mock server and return its base URL. */
 async function startMockServer(
   t: import("node:test").TestContext,
   handler: (body: unknown) => unknown,
-): Promise<string> {
+) {
   const server = Fastify({ logger: false });
   server.post("/querySmartContract", async (req) => handler(req.body));
   await server.listen({ port: 0, host: "127.0.0.1" });
@@ -68,23 +54,20 @@ async function startMockServer(
   return `http://127.0.0.1:${addr.port}`;
 }
 
-// ── decodeGetConfig ───────────────────────────────────────────────────────────
-
 describe("decodeGetConfig", () => {
   it("decodes all config fields correctly", () => {
-    // GetConfig_output is 120 bytes
     const buf = Buffer.alloc(120);
-    buf.fill(0xaa, 0, 32);   // admin
-    buf.fill(0xbb, 32, 64);  // protocolFeeRecipient
-    buf.fill(0xcc, 64, 96);  // oracleFeeRecipient
-    buf.writeUInt32LE(100, 96);  // bpsFee
-    buf.writeUInt32LE(20, 100);  // protocolFee
-    buf.writeUInt32LE(3, 104);   // oracleCount
-    buf.writeUInt32LE(1, 108);   // pauserCount
-    buf.writeUInt8(67, 112);     // oracleThreshold
-    buf.writeUInt8(0, 113);      // paused = false
+    buf.fill(0xaa, 0, 32);        // admin
+    buf.fill(0xbb, 32, 64);       // protocolFeeRecipient
+    buf.fill(0xcc, 64, 96);       // oracleFeeRecipient
+    buf.writeUInt32LE(100, 96);   // bpsFee
+    buf.writeUInt32LE(20, 100);   // protocolFee
+    buf.writeUInt32LE(3, 104);    // oracleCount
+    buf.writeUInt32LE(1, 108);    // pauserCount
+    buf.writeUInt8(67, 112);      // oracleThreshold
+    buf.writeUInt8(0, 113);       // paused = false
     // [114..115] padding
-    buf.writeUInt32LE(5, 116);   // orderEra
+    buf.writeUInt32LE(5, 116);    // orderEra
 
     const cfg = decodeGetConfig(buf.toString("hex"));
     assert.deepStrictEqual(cfg.admin, new Uint8Array(32).fill(0xaa));
@@ -106,8 +89,6 @@ describe("decodeGetConfig", () => {
     assert.strictEqual(cfg.paused, true);
   });
 });
-
-// ── decodeGetLockedOrders ─────────────────────────────────────────────────────
 
 describe("decodeGetLockedOrders", () => {
   it("decodes totalActive, returned and entries", () => {
@@ -162,8 +143,6 @@ describe("decodeGetLockedOrders", () => {
   });
 });
 
-// ── decodeGetFilledOrders ─────────────────────────────────────────────────────
-
 describe("decodeGetFilledOrders", () => {
   it("decodes totalActive, returned and hashes", () => {
     const hash1 = new Uint8Array(32).fill(0x11);
@@ -189,8 +168,6 @@ describe("decodeGetFilledOrders", () => {
   });
 });
 
-// ── encodePaginationInput ─────────────────────────────────────────────────────
-
 describe("encodePaginationInput", () => {
   it("encodes offset and limit as 8-byte LE hex", () => {
     const hex = encodePaginationInput(10, 64);
@@ -201,12 +178,12 @@ describe("encodePaginationInput", () => {
   });
 });
 
-// ── queryContractFunction ─────────────────────────────────────────────────────
-
 describe("queryContractFunction", () => {
   it("returns data hex on success", async (t) => {
     const url = await startMockServer(t, () => ({ data: "cafebabe" }));
-    const result = await queryContractFunction(url, FUNC_GET_CONFIG, "");
+    const client = new UndiciClient();
+    t.after(() => client.close());
+    const result = await createQubicContractClient(client, url).queryContractFunction(FUNC_GET_CONFIG, "");
     assert.strictEqual(result, "cafebabe");
   });
 
@@ -221,16 +198,20 @@ describe("queryContractFunction", () => {
     const url = `http://127.0.0.1:${(addr as import("node:net").AddressInfo).port}`;
     t.after(() => server.close());
 
+    const client = new UndiciClient();
+    t.after(() => client.close());
     await assert.rejects(
-      () => queryContractFunction(url, FUNC_GET_CONFIG, ""),
+      () => createQubicContractClient(client, url).queryContractFunction(FUNC_GET_CONFIG, ""),
       /querySmartContract HTTP 503/,
     );
   });
 
   it("throws after max retries when always pending", async (t) => {
     const url = await startMockServer(t, () => ({ error: "pending" }));
+    const client = new UndiciClient();
+    t.after(() => client.close());
     await assert.rejects(
-      () => queryContractFunction(url, FUNC_GET_LOCKED_ORDERS, encodePaginationInput(0, 64)),
+      () => createQubicContractClient(client, url).queryContractFunction(FUNC_GET_LOCKED_ORDERS, encodePaginationInput(0, 64)),
       /still pending after/,
     );
   }, { timeout: 10_000 });
@@ -241,15 +222,19 @@ describe("queryContractFunction", () => {
       calls++;
       return calls === 1 ? { error: "pending" } : { data: "1234" };
     });
-    const result = await queryContractFunction(url, FUNC_GET_FILLED_ORDERS, encodePaginationInput(0, 64));
+    const client = new UndiciClient();
+    t.after(() => client.close());
+    const result = await createQubicContractClient(client, url).queryContractFunction(FUNC_GET_FILLED_ORDERS, encodePaginationInput(0, 64));
     assert.strictEqual(result, "1234");
     assert.strictEqual(calls, 2);
   });
 
   it("throws on unexpected response shape", async (t) => {
     const url = await startMockServer(t, () => ({ nope: true }));
+    const client = new UndiciClient();
+    t.after(() => client.close());
     await assert.rejects(
-      () => queryContractFunction(url, FUNC_GET_CONFIG, ""),
+      () => createQubicContractClient(client, url).queryContractFunction(FUNC_GET_CONFIG, ""),
       /unexpected response/,
     );
   });

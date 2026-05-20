@@ -1,4 +1,8 @@
+import fp from "fastify-plugin";
 import { Buffer } from "node:buffer";
+import { FastifyInstance } from "fastify";
+import { kUndiciClient, UndiciClient, type UndiciClientService, HttpError } from "./undici-client.js";
+import { kConfig, type AppConfig } from "./env.js";
 
 const QSB_CONTRACT_INDEX = 28;
 const MAX_RETRIES = 20;
@@ -37,7 +41,12 @@ export type BridgeConfig = {
   orderEra: number;
 };
 
-/** Encode GetLockedOrders_input / GetFilledOrders_input: offset + limit (u32 LE each), as hex. */
+export type QubicContractClient = {
+  queryContractFunction(funcNumber: number, inputHex: string): Promise<string>;
+};
+
+export const kQubicContractClient = Symbol("infra.qubicContractClient");
+
 export function encodePaginationInput(offset: number, limit: number): string {
   const buf = Buffer.allocUnsafe(8);
   buf.writeUInt32LE(offset >>> 0, 0);
@@ -46,57 +55,18 @@ export function encodePaginationInput(offset: number, limit: number): string {
 }
 
 /**
- * Query a QSB contract view function via Bob Node POST /querySmartContract.
- * Retries up to MAX_RETRIES times on pending responses (300 ms between attempts).
- * Returns the raw output as a hex string.
- *
- * Bob Node request body: { nonce, scIndex, funcNumber, data (hex) }
- * Bob Node response: { data: string (hex) } | { error: "pending" }
- */
-export async function queryContractFunction(
-  bobUrl: string,
-  funcNumber: number,
-  inputHex: string,
-): Promise<string> {
-  const nonce = (Math.random() * 0xffffffff) >>> 0;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-    }
-    const res = await fetch(`${bobUrl}/querySmartContract`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nonce, scIndex: QSB_CONTRACT_INDEX, funcNumber, data: inputHex }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`querySmartContract HTTP ${res.status}: ${text}`);
-    }
-    const body = (await res.json()) as { error?: string; data?: unknown };
-    if (body.error === "pending") continue;
-    if (typeof body.data !== "string") {
-      throw new Error(`querySmartContract: unexpected response: ${JSON.stringify(body)}`);
-    }
-    return body.data;
-  }
-  throw new Error(`querySmartContract func=${funcNumber}: still pending after ${MAX_RETRIES} retries`);
-}
-
-/**
- * Decode a LockedOrderEntry (168 bytes) at `offset` within `buf`.
- *
- * Layout (packed, natural C++ alignment, LE):
- *   [+0..+31]   id        sender
- *   [+32..+39]  u64       amount
- *   [+40..+47]  u64       relayerFee
- *   [+48..+51]  u32       networkOut
- *   [+52..+55]  u32       nonce
- *   [+56..+119] u8[64]    toAddress (ASCII Solana address, zero-padded)
- *   [+120..+151] u8[32]   orderHash (K12 digest)
- *   [+152..+155] u32      lockEpoch
- *   [+156..+159] u32      orderEra
- *   [+160]      bit       active (1 byte)
- *   [+161..+167] --       7 bytes padding
+ * LockedOrderEntry layout (168 bytes, natural C++ alignment, LE):
+ *   [+0..+31]    id      sender
+ *   [+32..+39]   u64     amount
+ *   [+40..+47]   u64     relayerFee
+ *   [+48..+51]   u32     networkOut
+ *   [+52..+55]   u32     nonce
+ *   [+56..+119]  u8[64]  toAddress (ASCII, zero-padded)
+ *   [+120..+151] u8[32]  orderHash (K12 digest)
+ *   [+152..+155] u32     lockEpoch
+ *   [+156..+159] u32     orderEra
+ *   [+160]       bit     active (1 byte)
+ *   [+161..+167] --      7 bytes padding
  */
 function decodeLockedOrderEntry(buf: Buffer, offset: number): LockedOrder {
   return {
@@ -113,11 +83,6 @@ function decodeLockedOrderEntry(buf: Buffer, offset: number): LockedOrder {
   };
 }
 
-/**
- * Decode GetLockedOrders_output.
- *
- * Layout: u32 totalActive + u32 returned + Array<LockedOrderEntry(168), 64>
- */
 export function decodeGetLockedOrders(hex: string): {
   totalActive: number;
   returned: number;
@@ -133,12 +98,6 @@ export function decodeGetLockedOrders(hex: string): {
   return { totalActive, returned, entries };
 }
 
-/**
- * Decode GetFilledOrders_output.
- *
- * Layout: u32 totalActive + u32 returned + Array<OrderHash(32), 64>
- * Each hash is a 32-byte K12 digest.
- */
 export function decodeGetFilledOrders(hex: string): {
   totalActive: number;
   returned: number;
@@ -154,22 +113,6 @@ export function decodeGetFilledOrders(hex: string): {
   return { totalActive, returned, hashes };
 }
 
-/**
- * Decode GetConfig_output (120 bytes).
- *
- * Layout (packed, natural C++ alignment, LE):
- *   [0..31]    id    admin
- *   [32..63]   id    protocolFeeRecipient
- *   [64..95]   id    oracleFeeRecipient
- *   [96..99]   u32   bpsFee
- *   [100..103] u32   protocolFee
- *   [104..107] u32   oracleCount
- *   [108..111] u32   pauserCount
- *   [112]      u8    oracleThreshold
- *   [113]      bit   paused (1 byte, non-zero = true)
- *   [114..115] --    2 bytes padding (align u32)
- *   [116..119] u32   orderEra
- */
 export function decodeGetConfig(hex: string): BridgeConfig {
   const buf = Buffer.from(hex, "hex");
   return {
@@ -182,6 +125,51 @@ export function decodeGetConfig(hex: string): BridgeConfig {
     pauserCount: buf.readUInt32LE(108),
     oracleThreshold: buf.readUInt8(112),
     paused: buf.readUInt8(113) !== 0,
-    orderEra: buf.readUInt32LE(116),
+    orderEra: buf.readUInt32LE(116), // [114..115] is 2-byte alignment padding
   };
 }
+
+export function createQubicContractClient(client: UndiciClient, bobUrl: string): QubicContractClient {
+  const { origin } = new URL(bobUrl);
+  return {
+    async queryContractFunction(funcNumber: number, inputHex: string): Promise<string> {
+      const nonce = (Math.random() * 0xffffffff) >>> 0;
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+        let body: { error?: string; data?: unknown };
+        try {
+          body = await client.postJson<{ error?: string; data?: unknown }>(
+            origin,
+            "/querySmartContract",
+            { nonce, scIndex: QSB_CONTRACT_INDEX, funcNumber, data: inputHex },
+          );
+        } catch (err) {
+          if (err instanceof HttpError) {
+            throw new Error(`querySmartContract HTTP ${err.statusCode}: ${JSON.stringify(err.body)}`);
+          }
+          throw err;
+        }
+        if (body.error === "pending") continue; // Bob Node returns 200 { error: "pending" } until ready
+        if (typeof body.data !== "string") {
+          throw new Error(`querySmartContract: unexpected response: ${JSON.stringify(body)}`);
+        }
+        return body.data;
+      }
+      throw new Error(`querySmartContract func=${funcNumber}: still pending after ${MAX_RETRIES} retries`);
+    },
+  };
+}
+
+export default fp(
+  async function qubicContractClientPlugin(fastify: FastifyInstance) {
+    const config = fastify.getDecorator<AppConfig>(kConfig);
+    const undiciService = fastify.getDecorator<UndiciClientService>(kUndiciClient);
+    fastify.decorate(kQubicContractClient, createQubicContractClient(undiciService.create(), config.QUBIC_RPC_URL));
+  },
+  {
+    name: "qubic-contract-client",
+    dependencies: ["env", "undici-client"],
+  },
+);
