@@ -12,8 +12,7 @@ import { createQubicEventHandlers } from "../../events/qubic/qubic-events.js";
 import {
   kQubicContractClient,
   type QubicContractClient,
-  type QubicLockLogData,
-  type QubicUnlockLogData,
+  type LockedOrder,
 } from "../../../infra/qubic-contract-client.js";
 
 export type QubicEvent = {
@@ -28,73 +27,111 @@ export type QubicEventFetcher = (signal: AbortSignal) => Promise<QubicEvent[]>;
 
 export const kQubicEventFetcher = Symbol.for("qubicEventFetcher");
 
-const BATCH_SIZE = 200;
+const UNKNOWN_UNLOCK_ADDRESS = "0".repeat(64);
 
-function lockLogToQubicEvent(type: "lock" | "override-lock", data: QubicLockLogData): QubicEvent {
+function lockOrderToQubicEvent(
+  type: "lock" | "override-lock",
+  order: LockedOrder,
+): QubicEvent {
   return {
     chain: "qubic",
     type,
-    nonce: data.nonce.toString(),
-    orderHash: Buffer.from(data.orderHash).toString("hex"),
+    nonce: order.nonce.toString(),
+    orderHash: Buffer.from(order.orderHash).toString("hex"),
     payload: {
-      fromAddress: Buffer.from(data.fromAddress).toString("hex"),
-      toAddress: Buffer.from(data.toAddress).toString("ascii").replace(/\0+$/u, ""),
-      amount: data.amount.toString(),
-      relayerFee: data.relayerFee.toString(),
-      nonce: data.nonce.toString(),
-      orderEra: data.orderEra.toString(),
+      fromAddress: Buffer.from(order.sender).toString("hex"),
+      toAddress: Buffer.from(order.toAddress).toString("ascii").replace(/\0+$/u, ""),
+      amount: order.amount.toString(),
+      relayerFee: order.relayerFee.toString(),
+      nonce: order.nonce.toString(),
+      orderEra: order.orderEra.toString(),
     },
   };
 }
 
-// Unlock logs carry no nonce — recover it from the lock event seen this session.
-// For cross-epoch orders (lock in a prior epoch), nonce falls back to "".
-function unlockLogToQubicEvent(data: QubicUnlockLogData, nonce: string): QubicEvent {
+function unlockOrderHashToQubicEvent(orderHash: string): QubicEvent {
   return {
     chain: "qubic",
     type: "unlock",
-    nonce,
-    orderHash: Buffer.from(data.orderHash).toString("hex"),
+    nonce: "",
+    orderHash,
     payload: {
-      toAddress: Buffer.from(data.toAddress).toString("hex"),
-      amount: data.amount.toString(),
-      nonce,
+      toAddress: UNKNOWN_UNLOCK_ADDRESS,
+      amount: "0",
+      nonce: "",
     },
   };
 }
 
-export function createDefaultQubicEventFetcher(contractClient: QubicContractClient): QubicEventFetcher {
-  // Maps orderHash hex → nonce string; populated from lock events seen this session
-  // so that unlock events (which carry no nonce) can be reconstructed correctly.
-  const orderHashToNonce = new Map<string, string>();
-  let lastLogId = -1;
-  let lastEpoch = -1;
+function getLockIdentity(order: LockedOrder): string {
+  return [
+    Buffer.from(order.sender).toString("hex"),
+    order.nonce.toString(),
+    order.orderEra.toString(),
+  ].join(":");
+}
+
+export function createDefaultQubicEventFetcher(
+  contractClient: QubicContractClient,
+  opts: { syncToHeadOnStart?: boolean } = {},
+): QubicEventFetcher {
+  const syncToHeadOnStart = opts.syncToHeadOnStart === true;
+  let isInitialized = false;
+  let previousLocksByHash = new Map<string, LockedOrder>();
+  let previousLockIdentityToHash = new Map<string, string>();
+  let previousFilledOrderHashes = new Set<string>();
 
   return async () => {
-    const { epoch } = await contractClient.getBobStatus();
-    if (epoch !== lastEpoch) {
-      lastEpoch = epoch;
-      lastLogId = -1;
+    const [lockedOrders, filledOrderHashes] = await Promise.all([
+      contractClient.listLockedOrders(),
+      contractClient.listFilledOrderHashes(),
+    ]);
+    const currentLocksByHash = new Map<string, LockedOrder>();
+    const currentLockIdentityToHash = new Map<string, string>();
+    for (const order of lockedOrders) {
+      if (!order.active) continue;
+      const orderHash = Buffer.from(order.orderHash).toString("hex");
+      currentLocksByHash.set(orderHash, order);
+      currentLockIdentityToHash.set(getLockIdentity(order), orderHash);
     }
 
-    const events: QubicEvent[] = [];
-    while (true) {
-      const entries = await contractClient.findEvents(epoch, lastLogId + 1, lastLogId + BATCH_SIZE);
-      for (const entry of entries) {
-        if (!entry.data.success) continue;
-        if (entry.type === "lock" || entry.type === "override-lock") {
-          const event = lockLogToQubicEvent(entry.type, entry.data);
-          orderHashToNonce.set(event.orderHash, event.nonce);
-          events.push(event);
-        } else if (entry.type === "unlock") {
-          const orderHashHex = Buffer.from(entry.data.orderHash).toString("hex");
-          events.push(unlockLogToQubicEvent(entry.data, orderHashToNonce.get(orderHashHex) ?? ""));
-        }
-      }
-      if (entries.length === 0) break;
-      lastLogId = Math.max(...entries.map((e) => e.logId));
-      if (entries.length < BATCH_SIZE) break;
+    const currentFilledOrderHashes = new Set(
+      filledOrderHashes.map((hash) => Buffer.from(hash).toString("hex")),
+    );
+
+    if (syncToHeadOnStart && !isInitialized) {
+      previousLocksByHash = currentLocksByHash;
+      previousLockIdentityToHash = currentLockIdentityToHash;
+      previousFilledOrderHashes = currentFilledOrderHashes;
+      isInitialized = true;
+      return [];
     }
+    isInitialized = true;
+
+    const events: QubicEvent[] = [];
+
+    for (const [orderHash, order] of currentLocksByHash.entries()) {
+      if (previousLocksByHash.has(orderHash)) continue;
+      const previousHashForIdentity = previousLockIdentityToHash.get(
+        getLockIdentity(order),
+      );
+      const type =
+        previousHashForIdentity !== undefined && previousHashForIdentity !== orderHash
+          ? "override-lock"
+          : "lock";
+      events.push(lockOrderToQubicEvent(type, order));
+    }
+
+    for (const orderHash of currentFilledOrderHashes) {
+      if (!previousFilledOrderHashes.has(orderHash)) {
+        events.push(unlockOrderHashToQubicEvent(orderHash));
+      }
+    }
+
+    previousLocksByHash = currentLocksByHash;
+    previousLockIdentityToHash = currentLockIdentityToHash;
+    previousFilledOrderHashes = currentFilledOrderHashes;
+
     return events;
   };
 }
@@ -126,15 +163,10 @@ export default fp(
       createQubicEventHandlers({ eventsRepository, logger: fastify.log });
 
     const fetcher = resolveQubicEventFetcher(fastify, () =>
-      createDefaultQubicEventFetcher(contractClient),
+      createDefaultQubicEventFetcher(contractClient, {
+        syncToHeadOnStart: config.QUBIC_POLLER_SYNC_TO_HEAD_ON_START,
+      }),
     );
-
-    const filterNewLockEvents = async (items: QubicEvent[]) => {
-      const signatures = items.map((event) => event.orderHash);
-      const existing = await eventsRepository.findExistingSignatures(signatures);
-      const existingSet = new Set(existing);
-      return items.filter((event) => !existingSet.has(event.orderHash));
-    };
 
     const poller = pollerService.create<QubicEvent[]>({
       servers: [config.QUBIC_BOB_URL],
@@ -147,15 +179,8 @@ export default fp(
         }
       },
       onRound: async ([events = []]) => {
-        // Unlock events share orderHash with lock events — must not go through filterNewLockEvents.
-        // The cursor in createDefaultQubicEventFetcher prevents re-emitting within a session;
-        // on restart the DB onConflict constraint deduplicates any replayed unlocks.
-        const lockEvents = events.filter((e) => e.type === "lock" || e.type === "override-lock");
-        const unlockEvents = events.filter((e) => e.type === "unlock");
-        const newLockEvents = await filterNewLockEvents(lockEvents);
-        const allNew = [...newLockEvents, ...unlockEvents];
-        if (allNew.length === 0) return;
-        await Promise.allSettled(allNew.map((event) => handleQubicEvent(event)));
+        if (events.length === 0) return;
+        await Promise.allSettled(events.map((event) => handleQubicEvent(event)));
       },
       logger: fastify.log,
       intervalMs: config.QUBIC_POLLER_INTERVAL_MS,

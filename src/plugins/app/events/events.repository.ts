@@ -82,6 +82,7 @@ function createRepository(fastify: FastifyInstance): EventsRepository {
         .ignore();
 
       const insertedId = (inserted as number[])[0];
+      if (!insertedId) return null;
       const row = await knex<PersistedEvent>(EVENTS_TABLE_NAME)
         .select("*")
         .where({ id: insertedId })

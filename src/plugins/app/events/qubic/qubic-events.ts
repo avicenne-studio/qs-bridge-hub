@@ -21,7 +21,7 @@ export function createQubicEventHandlers(deps: QubicEventDependencies) {
   const { eventsRepository, logger } = deps;
 
   const handleQubicEvent = async (event: QubicEvent) => {
-    await eventsRepository.create({
+    const stored = await eventsRepository.create({
       signature: event.orderHash,
       slot: null,
       chain: "qubic",
@@ -29,6 +29,7 @@ export function createQubicEventHandlers(deps: QubicEventDependencies) {
       nonce: event.nonce,
       payload: event.payload,
     });
+    if (!stored) return;
     logger.info({ signature: event.orderHash }, "Qubic event stored");
   };
 

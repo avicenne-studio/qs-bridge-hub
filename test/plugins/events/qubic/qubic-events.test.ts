@@ -21,6 +21,7 @@ function createEventsRepository() {
   return {
     store,
     async create(event: { signature: string }) {
+      if (store.some((e) => e.signature === event.signature)) return null;
       store.push({ signature: event.signature });
       return event;
     },
@@ -77,5 +78,35 @@ describe("qubic event handlers", () => {
 
     t.assert.strictEqual(eventsRepository.store.length, 1);
     t.assert.strictEqual(eventsRepository.store[0].signature, "cafebabe03");
+  });
+
+  it("skips storing a duplicate qubic event", async (t: TestContext) => {
+    const { entries, logger } = createLogger();
+    const eventsRepository = createEventsRepository();
+    const { handleQubicEvent } = createQubicEventHandlers({
+      eventsRepository: eventsRepository as never,
+      logger: logger as never,
+    });
+
+    const event = {
+      chain: "qubic" as const,
+      type: "lock" as const,
+      nonce: "2",
+      orderHash: "deadbeef01",
+      payload: {
+        fromAddress: "aa".repeat(32),
+        toAddress: "SolAddr",
+        amount: "10",
+        relayerFee: "1",
+        nonce: "2",
+        orderEra: "0",
+      },
+    };
+
+    await handleQubicEvent(event);
+    await handleQubicEvent(event);
+
+    t.assert.strictEqual(eventsRepository.store.length, 1);
+    t.assert.strictEqual(entries.filter((e) => e.message === "Qubic event stored").length, 1);
   });
 });
