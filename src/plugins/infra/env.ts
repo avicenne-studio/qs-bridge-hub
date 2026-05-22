@@ -26,6 +26,7 @@ export type AppConfig = {
   QUBIC_POLLER_ENABLED: boolean;
   QUBIC_POLLER_INTERVAL_MS: number;
   QUBIC_POLLER_TIMEOUT_MS: number;
+  QUBIC_POLLER_SYNC_TO_HEAD_ON_START: boolean;
   SOLANA_WS_RECONNECT_BASE_MS: number;
   SOLANA_WS_RECONNECT_MAX_MS: number;
   SOLANA_WS_FALLBACK_RETRY_MS: number;
@@ -57,7 +58,8 @@ const schema = {
     'QUBIC_BOB_URL',
     'QUBIC_POLLER_ENABLED',
     'QUBIC_POLLER_INTERVAL_MS',
-    'QUBIC_POLLER_TIMEOUT_MS'
+    'QUBIC_POLLER_TIMEOUT_MS',
+    'QUBIC_POLLER_SYNC_TO_HEAD_ON_START'
   ],
   properties: {
     RATE_LIMIT_MAX: {
@@ -163,6 +165,10 @@ const schema = {
       type: 'number',
       minimum: 1000,
       default: 5_000
+    },
+    QUBIC_POLLER_SYNC_TO_HEAD_ON_START: {
+      type: 'boolean',
+      default: false
     },
     SOLANA_WS_RECONNECT_BASE_MS: {
       type: 'number',

@@ -24,7 +24,7 @@ const FIXTURE_KEYS_FILE = resolve(
 const DEFAULT_SOLANA_WS_URL = "wss://api.devnet.solana.com";
 const DEFAULT_SOLANA_RPC_URL = "https://api.devnet.solana.com";
 const DEFAULT_TOKEN_MINT = "So1111111111111111111111111111111111111111";
-const DEFAULT_QUBIC_RPC_URL = "http://127.0.0.1:3015";
+const DEFAULT_QUBIC_BOB_URL = "http://127.0.0.1:3015";
 
 const hubs = [
   { id: "hub-1", port: 3010, role: "primary", up: true },
@@ -48,7 +48,10 @@ function startHub(hub) {
       SOLANA_WS_URL: process.env.SOLANA_WS_URL ?? DEFAULT_SOLANA_WS_URL,
       SOLANA_RPC_URL: process.env.SOLANA_RPC_URL ?? DEFAULT_SOLANA_RPC_URL,
       TOKEN_MINT: process.env.TOKEN_MINT ?? DEFAULT_TOKEN_MINT,
-      QUBIC_RPC_URL: process.env.QUBIC_RPC_URL ?? DEFAULT_QUBIC_RPC_URL,
+      QUBIC_BOB_URL:
+        process.env.QUBIC_BOB_URL ??
+        process.env.QUBIC_RPC_URL ??
+        DEFAULT_QUBIC_BOB_URL,
     },
   });
 

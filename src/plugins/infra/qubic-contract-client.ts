@@ -81,11 +81,21 @@ export type QubicLogEvent =
 export type QubicContractClient = {
   queryContractFunction(funcNumber: number, inputHex: string): Promise<string>;
   getBobStatus(): Promise<{ epoch: number; tick: number }>;
+  getLockedOrders(
+    offset: number,
+    limit: number,
+  ): Promise<{ totalActive: number; returned: number; entries: LockedOrder[] }>;
+  getFilledOrders(
+    offset: number,
+    limit: number,
+  ): Promise<{ totalActive: number; returned: number; hashes: Uint8Array[] }>;
+  listLockedOrders(limit?: number): Promise<LockedOrder[]>;
+  listFilledOrderHashes(limit?: number): Promise<Uint8Array[]>;
   findEvents(
     epoch: number,
     fromLogId: number,
     toLogId: number,
-  ): Promise<QubicLogEvent[]>;
+  ): Promise<{ events: QubicLogEvent[]; rawCount: number; highestLogId: number | null }>;
 };
 
 export const kQubicContractClient = Symbol("infra.qubicContractClient");
@@ -320,14 +330,63 @@ export function createQubicContractClient(
       };
     },
 
+    async getLockedOrders(offset: number, limit: number) {
+      const hex = await this.queryContractFunction(
+        FUNC_GET_LOCKED_ORDERS,
+        encodePaginationInput(offset, limit),
+      );
+      return decodeGetLockedOrders(hex);
+    },
+
+    async getFilledOrders(offset: number, limit: number) {
+      const hex = await this.queryContractFunction(
+        FUNC_GET_FILLED_ORDERS,
+        encodePaginationInput(offset, limit),
+      );
+      return decodeGetFilledOrders(hex);
+    },
+
+    async listLockedOrders(limit = 64) {
+      const entries: LockedOrder[] = [];
+      for (let offset = 0; ; offset += limit) {
+        const page = await this.getLockedOrders(offset, limit);
+        entries.push(...page.entries);
+        if (page.returned < limit || entries.length >= page.totalActive) {
+          break;
+        }
+      }
+      return entries;
+    },
+
+    async listFilledOrderHashes(limit = 64) {
+      const hashes: Uint8Array[] = [];
+      for (let offset = 0; ; offset += limit) {
+        const page = await this.getFilledOrders(offset, limit);
+        hashes.push(...page.hashes);
+        if (page.returned < limit || hashes.length >= page.totalActive) {
+          break;
+        }
+      }
+      return hashes;
+    },
+
     async findEvents(epoch: number, fromLogId: number, toLogId: number) {
-      const entries = await client.getJson<unknown[]>(
+      const raw = await client.getJson<unknown[]>(
         origin,
         `/log/${epoch}/${fromLogId}/${toLogId}`,
       );
-      return entries
-        .map(parseQubicLogEntry)
-        .filter((e): e is QubicLogEvent => e !== null);
+      let highestLogId: number | null = null;
+      for (const entry of raw) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const logId = (entry as { logId?: unknown }).logId;
+        if (typeof logId !== "number" || !Number.isFinite(logId)) continue;
+        highestLogId = highestLogId === null ? logId : Math.max(highestLogId, logId);
+      }
+      return {
+        events: raw.map(parseQubicLogEntry).filter((e): e is QubicLogEvent => e !== null),
+        rawCount: raw.length,
+        highestLogId,
+      };
     },
   };
 }

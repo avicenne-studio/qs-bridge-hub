@@ -24,6 +24,14 @@ const DEFAULT_CLIENT_OPTIONS: ResolvedOptions = Object.freeze({
   connectTimeout: 5_000,
 });
 
+function isSocketError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as Record<string, unknown>)["code"] === "UND_ERR_SOCKET"
+  );
+}
+
 export class UndiciClient {
   private readonly pools = new Map<string, Pool>();
   private readonly opts: ResolvedOptions;
@@ -65,25 +73,32 @@ export class UndiciClient {
     headers?: Record<string, string>
   ): Promise<T> {
     const url = `${origin}${path}`;
-    const res = await request(url, {
-      method: "GET",
-      dispatcher: this.poolFor(origin),
-      signal,
-      headers: { ...this.opts.headers, ...(headers ?? {}) },
-    });
-
-    const payload = await parseBody(res);
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new HttpError({
-        message: `HTTP ${res.statusCode}`,
-        statusCode: res.statusCode,
-        url,
-        method: "GET",
-        body: payload,
-      });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await request(url, {
+          method: "GET",
+          dispatcher: this.poolFor(origin),
+          signal,
+          headers: { ...this.opts.headers, ...(headers ?? {}) },
+        });
+        const payload = await parseBody(res);
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          throw new HttpError({
+            message: `HTTP ${res.statusCode}`,
+            statusCode: res.statusCode,
+            url,
+            method: "GET",
+            body: payload,
+          });
+        }
+        return payload as T;
+      } catch (err) {
+        if (attempt === 0 && isSocketError(err)) continue;
+        throw err;
+      }
     }
-
-    return payload as T;
+    /* c8 ignore next */
+    throw new Error("unreachable");
   }
 
   async postJson<T>(
@@ -94,30 +109,37 @@ export class UndiciClient {
     headers?: Record<string, string>
   ): Promise<T> {
     const url = `${origin}${path}`;
-    const res = await request(url, {
-      method: "POST",
-      dispatcher: this.poolFor(origin),
-      signal,
-      headers: {
-        "content-type": "application/json",
-        ...this.opts.headers,
-        ...(headers ?? {}),
-      },
-      body: JSON.stringify(body),
-    });
-
-    const payload = await parseBody(res);
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new HttpError({
-        message: `HTTP ${res.statusCode}`,
-        statusCode: res.statusCode,
-        url,
-        method: "POST",
-        body: payload,
-      });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await request(url, {
+          method: "POST",
+          dispatcher: this.poolFor(origin),
+          signal,
+          headers: {
+            "content-type": "application/json",
+            ...this.opts.headers,
+            ...(headers ?? {}),
+          },
+          body: JSON.stringify(body),
+        });
+        const payload = await parseBody(res);
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          throw new HttpError({
+            message: `HTTP ${res.statusCode}`,
+            statusCode: res.statusCode,
+            url,
+            method: "POST",
+            body: payload,
+          });
+        }
+        return payload as T;
+      } catch (err) {
+        if (attempt === 0 && isSocketError(err)) continue;
+        throw err;
+      }
     }
-
-    return payload as T;
+    /* c8 ignore next */
+    throw new Error("unreachable");
   }
 
   async close(): Promise<void> {

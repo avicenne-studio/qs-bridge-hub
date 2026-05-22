@@ -47,16 +47,20 @@ export type ParsedJsonRpcMessage =
   | { kind: "logs"; value: LogsNotificationValue };
 
 function parseJsonMessage(raw: unknown): unknown | null {
-  if (typeof raw === "string") {
-    return JSON.parse(raw);
-  }
-  if (raw instanceof ArrayBuffer) {
-    return JSON.parse(Buffer.from(raw).toString("utf8"));
-  }
-  if (ArrayBuffer.isView(raw)) {
-    return JSON.parse(
-      Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("utf8")
-    );
+  try {
+    if (typeof raw === "string") {
+      return JSON.parse(raw);
+    }
+    if (raw instanceof ArrayBuffer) {
+      return JSON.parse(Buffer.from(raw).toString("utf8"));
+    }
+    if (ArrayBuffer.isView(raw)) {
+      return JSON.parse(
+        Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("utf8")
+      );
+    }
+  } catch {
+    return null;
   }
   return null;
 }

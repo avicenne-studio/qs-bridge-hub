@@ -256,6 +256,70 @@ describe("queryContractFunction", () => {
   });
 });
 
+describe("state pagination helpers", () => {
+  it("listLockedOrders walks every querySmartContract page", async (t) => {
+    const entries = [
+      buildLockedOrderEntryBuf({ nonce: 1, amount: 100n, orderHash: new Uint8Array(32).fill(0x11) }),
+      buildLockedOrderEntryBuf({ nonce: 2, amount: 200n, orderHash: new Uint8Array(32).fill(0x22) }),
+      buildLockedOrderEntryBuf({ nonce: 3, amount: 300n, orderHash: new Uint8Array(32).fill(0x33) }),
+    ];
+    const url = await startMockServer(t, (body) => {
+      const req = body as { funcNumber: number; data: string };
+      assert.strictEqual(req.funcNumber, FUNC_GET_LOCKED_ORDERS);
+      const input = Buffer.from(req.data, "hex");
+      const offset = input.readUInt32LE(0);
+      const limit = input.readUInt32LE(4);
+      const pageEntries = entries.slice(offset, offset + limit);
+      const buf = Buffer.alloc(8 + 64 * 168);
+      buf.writeUInt32LE(entries.length, 0);
+      buf.writeUInt32LE(pageEntries.length, 4);
+      for (const [index, entry] of pageEntries.entries()) {
+        buf.set(entry, 8 + index * 168);
+      }
+      return { data: buf.toString("hex") };
+    });
+    const client = new UndiciClient();
+    t.after(() => client.close());
+
+    const result = await createQubicContractClient(client, url).listLockedOrders(2);
+
+    assert.strictEqual(result.length, 3);
+    assert.strictEqual(result[0].nonce, 1);
+    assert.strictEqual(result[2].nonce, 3);
+  });
+
+  it("listFilledOrderHashes walks every querySmartContract page", async (t) => {
+    const hashes = [
+      new Uint8Array(32).fill(0x11),
+      new Uint8Array(32).fill(0x22),
+      new Uint8Array(32).fill(0x33),
+    ];
+    const url = await startMockServer(t, (body) => {
+      const req = body as { funcNumber: number; data: string };
+      assert.strictEqual(req.funcNumber, FUNC_GET_FILLED_ORDERS);
+      const input = Buffer.from(req.data, "hex");
+      const offset = input.readUInt32LE(0);
+      const limit = input.readUInt32LE(4);
+      const pageHashes = hashes.slice(offset, offset + limit);
+      const buf = Buffer.alloc(8 + 64 * 32);
+      buf.writeUInt32LE(hashes.length, 0);
+      buf.writeUInt32LE(pageHashes.length, 4);
+      for (const [index, hash] of pageHashes.entries()) {
+        buf.set(hash, 8 + index * 32);
+      }
+      return { data: buf.toString("hex") };
+    });
+    const client = new UndiciClient();
+    t.after(() => client.close());
+
+    const result = await createQubicContractClient(client, url).listFilledOrderHashes(2);
+
+    assert.strictEqual(result.length, 3);
+    assert.deepStrictEqual(result[0], hashes[0]);
+    assert.deepStrictEqual(result[2], hashes[2]);
+  });
+});
+
 async function startGetServer(
   t: import("node:test").TestContext,
   routes: Record<string, () => unknown>,
@@ -319,16 +383,20 @@ describe("findEvents", () => {
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 1);
-    assert.strictEqual(result[0].type, "lock");
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 1);
+    assert.strictEqual(result.highestLogId, 0);
+    assert.strictEqual(result.events[0].type, "lock");
   });
 
-  it("returns empty array when response is empty", async (t) => {
+  it("returns empty array and rawCount=0 when response is empty", async (t) => {
     const url = await startGetServer(t, { "/log/:epoch/:from/:to": () => [] });
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 0);
+    assert.strictEqual(result.events.length, 0);
+    assert.strictEqual(result.rawCount, 0);
+    assert.strictEqual(result.highestLogId, null);
   });
 
   it("filters out non-object and null entries", async (t) => {
@@ -338,7 +406,9 @@ describe("findEvents", () => {
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 1);
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 4);
+    assert.strictEqual(result.highestLogId, 0);
   });
 
   it("filters out entries where ok=false or type is not CONTRACT_INFO_LOG_TYPE", async (t) => {
@@ -352,8 +422,10 @@ describe("findEvents", () => {
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 1);
-    assert.strictEqual(result[0].logId, 2);
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 3);
+    assert.strictEqual(result.highestLogId, 2);
+    assert.strictEqual(result.events[0].logId, 2);
   });
 
   it("filters out entries with missing, wrong scIndex, or non-string content", async (t) => {
@@ -368,8 +440,10 @@ describe("findEvents", () => {
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 1);
-    assert.strictEqual(result[0].logId, 3);
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 4);
+    assert.strictEqual(result.highestLogId, 3);
+    assert.strictEqual(result.events[0].logId, 3);
   });
 
   it("filters out entries with unknown scLogType", async (t) => {
@@ -382,7 +456,25 @@ describe("findEvents", () => {
     const client = new UndiciClient();
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.length, 1);
-    assert.strictEqual(result[0].logId, 1);
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 2);
+    assert.strictEqual(result.highestLogId, 1);
+    assert.strictEqual(result.events[0].logId, 1);
+  });
+
+  it("tracks the highest log id even when entries are not parseable events", async (t) => {
+    const url = await startGetServer(t, {
+      "/log/:epoch/:from/:to": () => [
+        { ok: false, epoch: 1, tick: 100, logId: 7, error: "Missing log range" },
+        validLockEntry(8),
+      ],
+    });
+    const client = new UndiciClient();
+    t.after(() => client.close());
+    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
+    assert.strictEqual(result.events.length, 1);
+    assert.strictEqual(result.rawCount, 2);
+    assert.strictEqual(result.highestLogId, 8);
+    assert.strictEqual(result.events[0].logId, 8);
   });
 });

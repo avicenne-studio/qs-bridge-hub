@@ -595,6 +595,57 @@ describe("oracle service", () => {
       t.assert.strictEqual(updated?.status, "failed");
     });
 
+    test("preserves transaction-broadcasted status even when signature threshold is met", async (t: TestContext) => {
+      await setupThreeOrderServers(t, {
+        builders: [
+          serverOrderFactory("sig-1", "transaction-broadcasted", {
+            destination_trx_hash: "qubic-tx-1",
+          }),
+          serverOrderFactory("sig-2", "transaction-broadcasted", {
+            destination_trx_hash: "qubic-tx-1",
+          }),
+          serverOrderFactory("sig-3", "transaction-broadcasted", {
+            destination_trx_hash: "qubic-tx-1",
+          }),
+        ],
+        responseModes: ["data", "data", "array"],
+        orderIds: [makeId(1521)],
+      });
+
+      const app = await withApp(t);
+      const ordersRepository = getOrdersRepository(app);
+      markOraclesHealthy(app, ORACLE_URLS);
+
+      const created = await ordersRepository.create({
+        id: makeId(1521),
+        source: "solana",
+        dest: "qubic",
+        from: "A",
+        to: "B",
+        amount: "10",
+        relayerFee: "1",
+        origin_trx_hash: "trx-hash",
+        source_nonce: "nonce",
+        source_payload: "{\"v\":1}",
+        order_era: 0,
+        status: "pending",
+      });
+
+      const handle = app.getDecorator<OracleService>(kOracleService).pollOrders();
+      t.after(() => handle.stop());
+
+      await waitFor(async () => {
+        const updated = await ordersRepository.findById(created!.id);
+        return updated?.status === "transaction-broadcasted";
+      }, 15_000);
+
+      await handle.stop();
+
+      const updated = await ordersRepository.findById(created!.id);
+      t.assert.strictEqual(updated?.status, "transaction-broadcasted");
+      t.assert.strictEqual(updated?.destination_trx_hash, "qubic-tx-1");
+    });
+
     test("propagates failure_reason_public when consensus is failed", async (t: TestContext) => {
       await setupThreeOrderServers(t, {
         builders: [
