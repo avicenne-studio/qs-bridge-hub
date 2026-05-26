@@ -120,13 +120,7 @@ export default fp(
     const isUsingFallback = () => wsUrl === config.SOLANA_FALLBACK_WS_URL;
 
     const onMessage = (event: { data?: unknown }) => {
-      let parsed;
-      try {
-        parsed = parseJsonRpcMessage(event.data);
-      } catch (error) {
-        fastify.log.warn({ err: error }, "Solana listener received bad JSON");
-        return;
-      }
+      const parsed = parseJsonRpcMessage(event.data);
       if (!parsed) {
         return;
       }

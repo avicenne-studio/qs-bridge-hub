@@ -109,7 +109,6 @@ export function createDefaultQubicEventFetcher(
     isInitialized = true;
 
     const events: QubicEvent[] = [];
-
     for (const [orderHash, order] of currentLocksByHash.entries()) {
       if (previousLocksByHash.has(orderHash)) continue;
       const previousHashForIdentity = previousLockIdentityToHash.get(

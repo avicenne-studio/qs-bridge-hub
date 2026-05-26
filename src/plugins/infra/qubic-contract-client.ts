@@ -246,6 +246,7 @@ export function createQubicContractClient(
 
 export default fp(
   async function qubicContractClientPlugin(fastify: FastifyInstance) {
+    if (fastify.hasDecorator(kQubicContractClient)) return;
     const config = fastify.getDecorator<AppConfig>(kConfig);
     const undiciService =
       fastify.getDecorator<UndiciClientService>(kUndiciClient);

@@ -9,6 +9,7 @@ import { kEventsRepository } from "../../../../src/plugins/app/events/events.rep
 import {
   type LockedOrder,
   type QubicContractClient,
+  kQubicContractClient,
 } from "../../../../src/plugins/infra/qubic-contract-client.js";
 import { createInMemoryEventsRepository } from "../../../helpers/solana-events.js";
 import { waitFor } from "../../../helpers/wait-for.js";
@@ -304,5 +305,41 @@ describe("qubic poller plugin", () => {
     await waitFor(() => eventsRepo.store.length >= 1);
 
     t.assert.strictEqual(eventsRepo.store[0].signature, customEvent.orderHash);
+  });
+
+  it("skips inactive locked orders", async (t: TestContext) => {
+    const inactive = createLockedOrder({ nonce: 77, orderHashFill: 0x11, active: false });
+    const active = createLockedOrder({ nonce: 78, orderHashFill: 0x22 });
+    const fetcher = createDefaultQubicEventFetcher(
+      createStateClient([
+        { locks: [inactive, active], filled: [] },
+        { locks: [active], filled: [active.orderHash] },
+      ]),
+    );
+    const { eventsRepo } = await buildApp(t, fetcher);
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+
+    t.assert.ok(eventsRepo.store.every((e) => e.nonce !== "77"), "inactive order must not produce events");
+    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "78"), "active order must produce an event");
+  });
+
+  it("uses default fetcher when no custom fetcher is decorated", async (t: TestContext) => {
+    const eventsRepo = createInMemoryEventsRepository();
+    const order = createLockedOrder({ nonce: 99, orderHashFill: 0xfa });
+
+    const app = await build(t, {
+      useMocks: false,
+      config: { ...BASE_CONFIG, QUBIC_POLLER_SYNC_TO_HEAD_ON_START: false },
+      decorators: {
+        [kEventsRepository]: eventsRepo,
+        [kQubicContractClient]: createStateClient([{ locks: [order], filled: [] }]),
+      },
+    });
+
+    await waitFor(() => eventsRepo.store.length >= 1);
+    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "99"));
+
+    await app.close();
   });
 });
