@@ -334,18 +334,6 @@ async function startGetServer(
   return `http://127.0.0.1:${addr.port}`;
 }
 
-// Valid lock log entry for findEvents tests.
-function validLockEntry(logId = 0) {
-  return {
-    ok: true,
-    type: 6,     // CONTRACT_INFO_LOG_TYPE
-    epoch: 1,
-    tick: 100,
-    logId,
-    body: { scIndex: 28, scLogType: 1, content: "00".repeat(160) },
-  };
-}
-
 describe("getBobStatus", () => {
   it("returns epoch from currentProcessingEpoch and tick", async (t) => {
     const url = await startGetServer(t, {
@@ -372,109 +360,5 @@ describe("getBobStatus", () => {
     t.after(() => client.close());
     const result = await createQubicContractClient(client, url).getBobStatus();
     assert.strictEqual(result.epoch, 0);
-  });
-});
-
-describe("findEvents", () => {
-  it("returns parsed lock events from log range", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [validLockEntry()],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 1);
-    assert.strictEqual(result.highestLogId, 0);
-    assert.strictEqual(result.events[0].type, "lock");
-  });
-
-  it("returns empty array and rawCount=0 when response is empty", async (t) => {
-    const url = await startGetServer(t, { "/log/:epoch/:from/:to": () => [] });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 0);
-    assert.strictEqual(result.rawCount, 0);
-    assert.strictEqual(result.highestLogId, null);
-  });
-
-  it("filters out non-object and null entries", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [null, "string", 42, validLockEntry()],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 4);
-    assert.strictEqual(result.highestLogId, 0);
-  });
-
-  it("filters out entries where ok=false or type is not CONTRACT_INFO_LOG_TYPE", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [
-        { ...validLockEntry(), ok: false },
-        { ...validLockEntry(), type: 99 },
-        validLockEntry(2),
-      ],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 3);
-    assert.strictEqual(result.highestLogId, 2);
-    assert.strictEqual(result.events[0].logId, 2);
-  });
-
-  it("filters out entries with missing, wrong scIndex, or non-string content", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [
-        { ok: true, type: 6, logId: 0, tick: 1, epoch: 1 },                           // no body
-        { ...validLockEntry(1), body: { scIndex: 99, scLogType: 1, content: "aa" } }, // wrong scIndex
-        { ...validLockEntry(2), body: { scIndex: 28, scLogType: 1, content: 12345 } }, // non-string content
-        validLockEntry(3),
-      ],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 4);
-    assert.strictEqual(result.highestLogId, 3);
-    assert.strictEqual(result.events[0].logId, 3);
-  });
-
-  it("filters out entries with unknown scLogType", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [
-        { ...validLockEntry(), body: { scIndex: 28, scLogType: 99, content: "00".repeat(160) } },
-        validLockEntry(1),
-      ],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 2);
-    assert.strictEqual(result.highestLogId, 1);
-    assert.strictEqual(result.events[0].logId, 1);
-  });
-
-  it("tracks the highest log id even when entries are not parseable events", async (t) => {
-    const url = await startGetServer(t, {
-      "/log/:epoch/:from/:to": () => [
-        { ok: false, epoch: 1, tick: 100, logId: 7, error: "Missing log range" },
-        validLockEntry(8),
-      ],
-    });
-    const client = new UndiciClient();
-    t.after(() => client.close());
-    const result = await createQubicContractClient(client, url).findEvents(1, 0, 200);
-    assert.strictEqual(result.events.length, 1);
-    assert.strictEqual(result.rawCount, 2);
-    assert.strictEqual(result.highestLogId, 8);
-    assert.strictEqual(result.events[0].logId, 8);
   });
 });

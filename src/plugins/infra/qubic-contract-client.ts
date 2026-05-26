@@ -46,38 +46,6 @@ export type BridgeConfig = {
   orderEra: number;
 };
 
-export type QubicLockLogData = {
-  fromAddress: Uint8Array;
-  toAddress: Uint8Array;
-  amount: bigint;
-  relayerFee: bigint;
-  networkOut: number;
-  nonce: number;
-  orderHash: Uint8Array;
-  success: boolean;
-  orderEra: number;
-};
-
-export type QubicUnlockLogData = {
-  orderHash: Uint8Array;
-  toAddress: Uint8Array;
-  amount: bigint;
-  relayerFee: bigint;
-  relayer: Uint8Array;
-  success: boolean;
-  orderEra: number;
-};
-
-export type QubicLogEvent =
-  | { type: "lock"; logId: number; tick: number; data: QubicLockLogData }
-  | {
-      type: "override-lock";
-      logId: number;
-      tick: number;
-      data: QubicLockLogData;
-    }
-  | { type: "unlock"; logId: number; tick: number; data: QubicUnlockLogData };
-
 export type QubicContractClient = {
   queryContractFunction(funcNumber: number, inputHex: string): Promise<string>;
   getBobStatus(): Promise<{ epoch: number; tick: number }>;
@@ -91,11 +59,6 @@ export type QubicContractClient = {
   ): Promise<{ totalActive: number; returned: number; hashes: Uint8Array[] }>;
   listLockedOrders(limit?: number): Promise<LockedOrder[]>;
   listFilledOrderHashes(limit?: number): Promise<Uint8Array[]>;
-  findEvents(
-    epoch: number,
-    fromLogId: number,
-    toLogId: number,
-  ): Promise<{ events: QubicLogEvent[]; rawCount: number; highestLogId: number | null }>;
 };
 
 export const kQubicContractClient = Symbol("infra.qubicContractClient");
@@ -180,98 +143,6 @@ export function decodeGetConfig(hex: string): BridgeConfig {
     paused: buf.readUInt8(113) !== 0,
     orderEra: buf.readUInt32LE(116), // [114..115] is 2-byte alignment padding
   };
-}
-
-// Bob stores LOG_INFO() as CONTRACT_INFORMATION_MESSAGE (type 6).
-const CONTRACT_INFO_LOG_TYPE = 6;
-const QSB_LOG_LOCK = 1;
-const QSB_LOG_OVERRIDE_LOCK = 2;
-const QSB_LOG_UNLOCK = 3;
-
-/**
- * Lock/OverrideLock log content (160B, Bob strips the 8-byte header):
- *   [0..31]    id      fromAddress
- *   [32..95]   u8[64]  toAddress (Solana ASCII, zero-padded)
- *   [96..103]  u64 LE  amount
- *   [104..111] u64 LE  relayerFee
- *   [112..115] u32 LE  networkOut
- *   [116..119] u32 LE  nonce
- *   [120..151] u8[32]  orderHash
- *   [152]      u8      success
- *   [153]      u8      reasonCode
- *   [154..155] --      padding
- *   [156..159] u32 LE  orderEra
- */
-function parseLockLogContent(content: string): QubicLockLogData {
-  const buf = Buffer.from(content, "hex");
-  return {
-    fromAddress: new Uint8Array(buf.subarray(0, 32)),
-    toAddress: new Uint8Array(buf.subarray(32, 96)),
-    amount: buf.readBigUInt64LE(96),
-    relayerFee: buf.readBigUInt64LE(104),
-    networkOut: buf.readUInt32LE(112),
-    nonce: buf.readUInt32LE(116),
-    orderHash: new Uint8Array(buf.subarray(120, 152)),
-    success: buf.readUInt8(152) !== 0,
-    orderEra: buf.readUInt32LE(156),
-  };
-}
-
-/**
- * Unlock log content (120B, Bob strips the 8-byte header):
- *   [0..31]    u8[32]  orderHash
- *   [32..63]   id      toAddress (Qubic recipient)
- *   [64..71]   u64 LE  amount
- *   [72..79]   u64 LE  relayerFee
- *   [80..111]  id      relayer
- *   [112]      u8      success
- *   [113]      u8      reasonCode
- *   [114..115] --      padding
- *   [116..119] u32 LE  orderEra
- */
-function parseUnlockLogContent(content: string): QubicUnlockLogData {
-  const buf = Buffer.from(content, "hex");
-  return {
-    orderHash: new Uint8Array(buf.subarray(0, 32)),
-    toAddress: new Uint8Array(buf.subarray(32, 64)),
-    amount: buf.readBigUInt64LE(64),
-    relayerFee: buf.readBigUInt64LE(72),
-    relayer: new Uint8Array(buf.subarray(80, 112)),
-    success: buf.readUInt8(112) !== 0,
-    orderEra: buf.readUInt32LE(116),
-  };
-}
-
-function parseQubicLogEntry(entry: unknown): QubicLogEvent | null {
-  if (typeof entry !== "object" || entry === null) return null;
-  const e = entry as Record<string, unknown>;
-  if (e.ok !== true || e.type !== CONTRACT_INFO_LOG_TYPE) return null;
-  const body = e.body as Record<string, unknown> | undefined;
-  if (
-    !body ||
-    body.scIndex !== QSB_CONTRACT_INDEX ||
-    typeof body.content !== "string"
-  )
-    return null;
-  const base = { logId: e.logId as number, tick: e.tick as number };
-  switch (body.scLogType) {
-    case QSB_LOG_LOCK:
-      return { ...base, type: "lock", data: parseLockLogContent(body.content) };
-    case QSB_LOG_OVERRIDE_LOCK:
-      return {
-        ...base,
-        type: "override-lock",
-        data: parseLockLogContent(body.content),
-      };
-    case QSB_LOG_UNLOCK:
-      return {
-        ...base,
-        type: "unlock",
-        data: parseUnlockLogContent(body.content),
-      };
-    default:
-      return null;
-  }
 }
 
 export function createQubicContractClient(
@@ -370,24 +241,6 @@ export function createQubicContractClient(
       return hashes;
     },
 
-    async findEvents(epoch: number, fromLogId: number, toLogId: number) {
-      const raw = await client.getJson<unknown[]>(
-        origin,
-        `/log/${epoch}/${fromLogId}/${toLogId}`,
-      );
-      let highestLogId: number | null = null;
-      for (const entry of raw) {
-        if (typeof entry !== "object" || entry === null) continue;
-        const logId = (entry as { logId?: unknown }).logId;
-        if (typeof logId !== "number" || !Number.isFinite(logId)) continue;
-        highestLogId = highestLogId === null ? logId : Math.max(highestLogId, logId);
-      }
-      return {
-        events: raw.map(parseQubicLogEntry).filter((e): e is QubicLogEvent => e !== null),
-        rawCount: raw.length,
-        highestLogId,
-      };
-    },
   };
 }
 

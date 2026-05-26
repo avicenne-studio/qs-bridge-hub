@@ -78,9 +78,6 @@ function createStateClient(states: Array<{ locks?: LockedOrder[]; filled?: Uint8
       advance();
       return filled;
     },
-    async findEvents() {
-      return { events: [], rawCount: 0, highestLogId: null };
-    },
   };
 }
 
