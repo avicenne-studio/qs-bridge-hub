@@ -48,8 +48,8 @@ describe("solana ws json-rpc helpers", () => {
     assert.strictEqual(parseJsonRpcMessage(123 as unknown as string), null);
   });
 
-  it("throws on invalid JSON", () => {
-    assert.throws(() => parseJsonRpcMessage("{bad json"));
+  it("returns null for invalid JSON", () => {
+    assert.strictEqual(parseJsonRpcMessage("{bad json"), null);
   });
 
   it("sends requests with incrementing ids", () => {

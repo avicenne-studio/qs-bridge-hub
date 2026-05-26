@@ -1,8 +1,10 @@
 import { describe, it, TestContext } from "node:test";
+import * as http from "node:http";
 import { AddressInfo } from "node:net";
 import { build } from "../../helpers/build.js";
 import { createTrackedServer } from "../../helpers/http-server.js";
 import {
+  UndiciClient,
   kUndiciClient,
   HttpError,
   type UndiciClientService,
@@ -75,6 +77,50 @@ describe("undici client plugin", () => {
       }
     );
     await client.close();
+  });
+
+  it("retries once on UND_ERR_SOCKET (server closes keep-alive connection)", async (t) => {
+    let attempts = 0;
+    const server = http.createServer((req, res) => {
+      attempts++;
+      if (attempts === 1) {
+        req.socket.destroy();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ retried: true }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    t.after(() => server.close());
+
+    const { port } = server.address() as AddressInfo;
+    const client = new UndiciClient();
+    t.after(() => client.close());
+
+    const result = await client.getJson<{ retried: boolean }>(`http://127.0.0.1:${port}`, "/test");
+    t.assert.deepStrictEqual(result, { retried: true });
+    t.assert.strictEqual(attempts, 2);
+  });
+
+  it("re-throws non-socket errors without retrying", async (t) => {
+    let attempts = 0;
+    const server = http.createServer((_req, res) => {
+      attempts++;
+      res.writeHead(503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "boom" }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    t.after(() => server.close());
+
+    const { port } = server.address() as AddressInfo;
+    const client = new UndiciClient();
+    t.after(() => client.close());
+
+    await t.assert.rejects(
+      client.getJson(`http://127.0.0.1:${port}`, "/test"),
+      (err: unknown) => err instanceof HttpError,
+    );
+    t.assert.strictEqual(attempts, 1);
   });
 
   it("closes created clients on app shutdown and exposes defaults", async (t: TestContext) => {

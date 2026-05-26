@@ -42,6 +42,18 @@ async function seedEvents(app: Awaited<ReturnType<typeof build>>) {
       nonce: hex32(2),
     },
   });
+  await eventsRepository.create({
+    signature: "sig-703",
+    slot: null,
+    chain: "qubic",
+    type: "unlock",
+    nonce: "",
+    payload: {
+      toAddress: hex32(7),
+      amount: "99",
+      nonce: "",
+    },
+  });
 }
 
 test("GET /api/orders/events returns event list and cursor", async (t: TestContext) => {
@@ -56,11 +68,13 @@ test("GET /api/orders/events returns event list and cursor", async (t: TestConte
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
 
-  t.assert.strictEqual(body.data.length, 2);
+  t.assert.strictEqual(body.data.length, 3);
   t.assert.strictEqual(body.data[0].signature, "sig-701");
+  t.assert.strictEqual(body.data[2].signature, "sig-703");
+  t.assert.strictEqual(body.data[2].payload.nonce, "");
   t.assert.deepStrictEqual(body.cursor, {
-    createdAt: body.data[1].createdAt,
-    id: body.data[1].id,
+    createdAt: body.data[2].createdAt,
+    id: body.data[2].id,
   });
 });
 

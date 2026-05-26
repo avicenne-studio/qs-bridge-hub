@@ -31,7 +31,9 @@ export const QubicOverrideLockEventPayloadSchema = Type.Object({
 export const QubicUnlockEventPayloadSchema = Type.Object({
   toAddress: StringSchema,
   amount: AmountSchema,
-  nonce: StringSchema,
+  // Unlock logs do not carry a nonce. When the corresponding lock log was not
+  // seen in this hub session, the poller persists an empty-string fallback.
+  nonce: Type.String({ maxLength: 255 }),
 });
 
 export const QubicEventPayloadSchema = Type.Union([

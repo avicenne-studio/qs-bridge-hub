@@ -1,89 +1,137 @@
 import fp from "fastify-plugin";
+import { Buffer } from "node:buffer";
 import { FastifyInstance } from "fastify";
-import { Type } from "@sinclair/typebox";
 import type { AppConfig } from "../../../infra/env.js";
 import { kConfig } from "../../../infra/env.js";
 import { kPoller, type PollerService } from "../../../infra/poller.js";
-import {
-  kUndiciClient,
-  type UndiciClientService,
-  UndiciClient,
-} from "../../../infra/undici-client.js";
 import { kEventsRepository, type EventsRepository } from "../../events/events.repository.js";
 import {
-  QubicEventPayloadSchema,
-  QubicEventTypeSchema,
+  type QubicEventPayload,
 } from "../../events/qubic/schemas/event.js";
-import { type QubicEventPayload } from "../../events/qubic/schemas/event.js";
 import { createQubicEventHandlers } from "../../events/qubic/qubic-events.js";
-import { formatFirstError, kValidation, type ValidationService } from "../../common/validator.js";
+import {
+  kQubicContractClient,
+  type QubicContractClient,
+  type LockedOrder,
+} from "../../../infra/qubic-contract-client.js";
 
 export type QubicEvent = {
   chain: "qubic";
-  type: "lock" | "override-lock";
+  type: "lock" | "override-lock" | "unlock";
   nonce: string;
   payload: QubicEventPayload;
-  trxHash?: string;
-  orderHash?: string;
-  createdAt?: string;
+  orderHash: string;
 };
-
-type QubicEventsPayload = QubicEvent[] | { data: QubicEvent[] };
 
 export type QubicEventFetcher = (signal: AbortSignal) => Promise<QubicEvent[]>;
 
 export const kQubicEventFetcher = Symbol.for("qubicEventFetcher");
 
-const QubicEventSchema = Type.Object({
-  chain: Type.Literal("qubic"),
-  type: QubicEventTypeSchema,
-  nonce: Type.String(),
-  payload: QubicEventPayloadSchema,
-  trxHash: Type.Optional(Type.String()),
-  orderHash: Type.Optional(Type.String()),
-  createdAt: Type.Optional(Type.String()),
-});
+const UNKNOWN_UNLOCK_ADDRESS = "0".repeat(64);
 
-const QubicEventsPayloadSchema = Type.Union([
-  Type.Array(QubicEventSchema),
-  Type.Object({ data: Type.Array(QubicEventSchema) }),
-]);
+function lockOrderToQubicEvent(
+  type: "lock" | "override-lock",
+  order: LockedOrder,
+): QubicEvent {
+  return {
+    chain: "qubic",
+    type,
+    nonce: order.nonce.toString(),
+    orderHash: Buffer.from(order.orderHash).toString("hex"),
+    payload: {
+      fromAddress: Buffer.from(order.sender).toString("hex"),
+      toAddress: Buffer.from(order.toAddress).toString("ascii").replace(/\0+$/u, ""),
+      amount: order.amount.toString(),
+      relayerFee: order.relayerFee.toString(),
+      nonce: order.nonce.toString(),
+      orderEra: order.orderEra.toString(),
+    },
+  };
+}
 
-function normalizeEventsPayload(
-  payload: unknown,
-  validation: ValidationService,
-  fastify: FastifyInstance,
-) {
-  if (!validation.isValid<QubicEventsPayload>(QubicEventsPayloadSchema, payload)) {
-    const payloadType = Array.isArray(payload) ? "array" : typeof payload;
-    const payloadKeys =
-      payload && typeof payload === "object"
-        ? Object.keys(payload as Record<string, unknown>).slice(0, 8)
-        : [];
-    const reason = formatFirstError(QubicEventsPayloadSchema, payload);
-    fastify.log.warn(
-      { reason, payloadType, payloadKeys },
-      "qubic events poll returned invalid payload",
-    );
-    return [] as QubicEvent[];
-  }
+function unlockOrderHashToQubicEvent(orderHash: string): QubicEvent {
+  return {
+    chain: "qubic",
+    type: "unlock",
+    nonce: "",
+    orderHash,
+    payload: {
+      toAddress: UNKNOWN_UNLOCK_ADDRESS,
+      amount: "0",
+      nonce: "",
+    },
+  };
+}
 
-  return Array.isArray(payload) ? payload : payload.data;
+function getLockIdentity(order: LockedOrder): string {
+  return [
+    Buffer.from(order.sender).toString("hex"),
+    order.nonce.toString(),
+    order.orderEra.toString(),
+  ].join(":");
 }
 
 export function createDefaultQubicEventFetcher(
-  client: UndiciClient,
-  rpcUrl: string,
+  contractClient: QubicContractClient,
+  opts: { syncToHeadOnStart?: boolean } = {},
 ): QubicEventFetcher {
-  const url = new URL(rpcUrl);
-  const origin = url.origin;
-  const basePath = url.pathname.replace(/\/+$/, "");
-  const path = `${basePath}/events${url.search}`;
+  const syncToHeadOnStart = opts.syncToHeadOnStart === true;
+  let isInitialized = false;
+  let previousLocksByHash = new Map<string, LockedOrder>();
+  let previousLockIdentityToHash = new Map<string, string>();
+  let previousFilledOrderHashes = new Set<string>();
 
-  return async (signal: AbortSignal) => {
-    return client.getJson<QubicEventsPayload>(origin, path, signal).then(
-      (payload) => (Array.isArray(payload) ? payload : payload.data),
+  return async () => {
+    const [lockedOrders, filledOrderHashes] = await Promise.all([
+      contractClient.listLockedOrders(),
+      contractClient.listFilledOrderHashes(),
+    ]);
+    const currentLocksByHash = new Map<string, LockedOrder>();
+    const currentLockIdentityToHash = new Map<string, string>();
+    for (const order of lockedOrders) {
+      if (!order.active) continue;
+      const orderHash = Buffer.from(order.orderHash).toString("hex");
+      currentLocksByHash.set(orderHash, order);
+      currentLockIdentityToHash.set(getLockIdentity(order), orderHash);
+    }
+
+    const currentFilledOrderHashes = new Set(
+      filledOrderHashes.map((hash) => Buffer.from(hash).toString("hex")),
     );
+
+    if (syncToHeadOnStart && !isInitialized) {
+      previousLocksByHash = currentLocksByHash;
+      previousLockIdentityToHash = currentLockIdentityToHash;
+      previousFilledOrderHashes = currentFilledOrderHashes;
+      isInitialized = true;
+      return [];
+    }
+    isInitialized = true;
+
+    const events: QubicEvent[] = [];
+    for (const [orderHash, order] of currentLocksByHash.entries()) {
+      if (previousLocksByHash.has(orderHash)) continue;
+      const previousHashForIdentity = previousLockIdentityToHash.get(
+        getLockIdentity(order),
+      );
+      const type =
+        previousHashForIdentity !== undefined && previousHashForIdentity !== orderHash
+          ? "override-lock"
+          : "lock";
+      events.push(lockOrderToQubicEvent(type, order));
+    }
+
+    for (const orderHash of currentFilledOrderHashes) {
+      if (!previousFilledOrderHashes.has(orderHash)) {
+        events.push(unlockOrderHashToQubicEvent(orderHash));
+      }
+    }
+
+    previousLocksByHash = currentLocksByHash;
+    previousLockIdentityToHash = currentLockIdentityToHash;
+    previousFilledOrderHashes = currentFilledOrderHashes;
+
+    return events;
   };
 }
 
@@ -106,50 +154,32 @@ export default fp(
       return;
     }
 
-    const eventsRepository =
-      fastify.getDecorator<EventsRepository>(kEventsRepository);
+    const eventsRepository = fastify.getDecorator<EventsRepository>(kEventsRepository);
     const pollerService = fastify.getDecorator<PollerService>(kPoller);
-    const undiciService =
-      fastify.getDecorator<UndiciClientService>(kUndiciClient);
-    const validation = fastify.getDecorator<ValidationService>(kValidation);
+    const contractClient = fastify.getDecorator<QubicContractClient>(kQubicContractClient);
 
     const { handleQubicEvent } =
       createQubicEventHandlers({ eventsRepository, logger: fastify.log });
 
-    const client = undiciService.create();
     const fetcher = resolveQubicEventFetcher(fastify, () =>
-      createDefaultQubicEventFetcher(client, config.QUBIC_RPC_URL),
+      createDefaultQubicEventFetcher(contractClient, {
+        syncToHeadOnStart: config.QUBIC_POLLER_SYNC_TO_HEAD_ON_START,
+      }),
     );
 
-    const filterNewEvents = async (items: QubicEvent[]) => {
-      const signatures = items.map((event) => event.trxHash ?? "");
-      const existing = await eventsRepository.findExistingSignatures(signatures);
-      const existingSet = new Set(existing);
-      return items.filter(
-        (event) => event.trxHash && !existingSet.has(event.trxHash),
-      );
-    };
-
     const poller = pollerService.create<QubicEvent[]>({
-      servers: [config.QUBIC_RPC_URL],
+      servers: [config.QUBIC_BOB_URL],
       fetchOne: async (_server, signal) => {
         try {
-          const payload = await fetcher(signal);
-          return normalizeEventsPayload(payload, validation, fastify);
+          return await fetcher(signal);
         } catch (err) {
           fastify.log.warn({ err }, "qubic events poll failed");
           return [] as QubicEvent[];
         }
       },
       onRound: async ([events = []]) => {
-        const newEvents = await filterNewEvents(events);
-        if (newEvents.length === 0) {
-          return;
-        }
-
-        await Promise.allSettled(
-          newEvents.map((event) => handleQubicEvent(event)),
-        );
+        if (events.length === 0) return;
+        await Promise.allSettled(events.map((event) => handleQubicEvent(event)));
       },
       logger: fastify.log,
       intervalMs: config.QUBIC_POLLER_INTERVAL_MS,
@@ -167,8 +197,7 @@ export default fp(
       "env",
       "events-repository",
       "polling",
-      "undici-client",
-      "validation",
+      "qubic-contract-client",
     ],
   },
 );
