@@ -31,7 +31,7 @@ import {
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs/index.js";
 import { getAccountMetaFactory, type ResolvedAccount } from "../shared/index.js";
 
-export const CLAIM_ORACLE_FEE_DISCRIMINATOR = 11;
+export const CLAIM_ORACLE_FEE_DISCRIMINATOR = 13;
 
 export function getClaimOracleFeeDiscriminatorBytes() {
   return getU8Encoder().encode(CLAIM_ORACLE_FEE_DISCRIMINATOR);

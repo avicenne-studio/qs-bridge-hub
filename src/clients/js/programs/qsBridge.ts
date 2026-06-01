@@ -13,6 +13,7 @@ import {
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
+  type ParsedAcceptAdminInstruction,
   type ParsedAddOracleInstruction,
   type ParsedAddPauserInstruction,
   type ParsedClaimOracleFeeInstruction,
@@ -24,6 +25,7 @@ import {
   type ParsedPauseInstruction,
   type ParsedRemoveOracleInstruction,
   type ParsedRemovePauserInstruction,
+  type ParsedTransferAdminInstruction,
   type ParsedUnpauseInstruction,
 } from "../instructions/index.js";
 
@@ -49,6 +51,8 @@ export enum QsBridgeInstruction {
   AddOracle,
   RemoveOracle,
   Inbound,
+  TransferAdmin,
+  AcceptAdmin,
   ClaimProtocolFee,
   ClaimOracleFee,
 }
@@ -88,9 +92,15 @@ export function identifyQsBridgeInstruction(
     return QsBridgeInstruction.Inbound;
   }
   if (containsBytes(data, getU8Encoder().encode(10), 0)) {
-    return QsBridgeInstruction.ClaimProtocolFee;
+    return QsBridgeInstruction.TransferAdmin;
   }
   if (containsBytes(data, getU8Encoder().encode(11), 0)) {
+    return QsBridgeInstruction.AcceptAdmin;
+  }
+  if (containsBytes(data, getU8Encoder().encode(12), 0)) {
+    return QsBridgeInstruction.ClaimProtocolFee;
+  }
+  if (containsBytes(data, getU8Encoder().encode(13), 0)) {
     return QsBridgeInstruction.ClaimOracleFee;
   }
   throw new Error(
@@ -131,6 +141,12 @@ export type ParsedQsBridgeInstruction<
   | ({
       instructionType: QsBridgeInstruction.Inbound;
     } & ParsedInboundInstruction<TProgram>)
+  | ({
+      instructionType: QsBridgeInstruction.TransferAdmin;
+    } & ParsedTransferAdminInstruction<TProgram>)
+  | ({
+      instructionType: QsBridgeInstruction.AcceptAdmin;
+    } & ParsedAcceptAdminInstruction<TProgram>)
   | ({
       instructionType: QsBridgeInstruction.ClaimProtocolFee;
     } & ParsedClaimProtocolFeeInstruction<TProgram>)

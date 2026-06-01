@@ -30,25 +30,25 @@ import {
 import { QS_BRIDGE_PROGRAM_ADDRESS } from "../programs/index.js";
 import { getAccountMetaFactory, type ResolvedAccount } from "../shared/index.js";
 
-export const UNPAUSE_DISCRIMINATOR = 6;
+export const ACCEPT_ADMIN_DISCRIMINATOR = 11;
 
-export function getUnpauseDiscriminatorBytes() {
-  return getU8Encoder().encode(UNPAUSE_DISCRIMINATOR);
+export function getAcceptAdminDiscriminatorBytes() {
+  return getU8Encoder().encode(ACCEPT_ADMIN_DISCRIMINATOR);
 }
 
-export type UnpauseInstruction<
+export type AcceptAdminInstruction<
   TProgram extends string = typeof QS_BRIDGE_PROGRAM_ADDRESS,
-  TAccountAdmin extends string | AccountMeta<string> = string,
+  TAccountPendingAdmin extends string | AccountMeta<string> = string,
   TAccountGlobalState extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
-      TAccountAdmin extends string
-        ? WritableSignerAccount<TAccountAdmin> &
-            AccountSignerMeta<TAccountAdmin>
-        : TAccountAdmin,
+      TAccountPendingAdmin extends string
+        ? WritableSignerAccount<TAccountPendingAdmin> &
+            AccountSignerMeta<TAccountPendingAdmin>
+        : TAccountPendingAdmin,
       TAccountGlobalState extends string
         ? WritableAccount<TAccountGlobalState>
         : TAccountGlobalState,
@@ -56,55 +56,59 @@ export type UnpauseInstruction<
     ]
   >;
 
-export type UnpauseInstructionData = { discriminator: number };
+export type AcceptAdminInstructionData = { discriminator: number };
 
-export type UnpauseInstructionDataArgs = {};
+export type AcceptAdminInstructionDataArgs = {};
 
-export function getUnpauseInstructionDataEncoder(): FixedSizeEncoder<UnpauseInstructionDataArgs> {
+export function getAcceptAdminInstructionDataEncoder(): FixedSizeEncoder<AcceptAdminInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([["discriminator", getU8Encoder()]]),
-    (value) => ({ ...value, discriminator: UNPAUSE_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: ACCEPT_ADMIN_DISCRIMINATOR }),
   );
 }
 
-export function getUnpauseInstructionDataDecoder(): FixedSizeDecoder<UnpauseInstructionData> {
+export function getAcceptAdminInstructionDataDecoder(): FixedSizeDecoder<AcceptAdminInstructionData> {
   return getStructDecoder([["discriminator", getU8Decoder()]]);
 }
 
-export function getUnpauseInstructionDataCodec(): FixedSizeCodec<
-  UnpauseInstructionDataArgs,
-  UnpauseInstructionData
+export function getAcceptAdminInstructionDataCodec(): FixedSizeCodec<
+  AcceptAdminInstructionDataArgs,
+  AcceptAdminInstructionData
 > {
   return combineCodec(
-    getUnpauseInstructionDataEncoder(),
-    getUnpauseInstructionDataDecoder(),
+    getAcceptAdminInstructionDataEncoder(),
+    getAcceptAdminInstructionDataDecoder(),
   );
 }
 
-export type UnpauseInput<
-  TAccountAdmin extends string = string,
+export type AcceptAdminInput<
+  TAccountPendingAdmin extends string = string,
   TAccountGlobalState extends string = string,
 > = {
-  /** Admin */
-  admin: TransactionSigner<TAccountAdmin>;
+  /** Pending admin accepting the transfer */
+  pendingAdmin: TransactionSigner<TAccountPendingAdmin>;
   /** Global State */
   globalState: Address<TAccountGlobalState>;
 };
 
-export function getUnpauseInstruction<
-  TAccountAdmin extends string,
+export function getAcceptAdminInstruction<
+  TAccountPendingAdmin extends string,
   TAccountGlobalState extends string,
   TProgramAddress extends Address = typeof QS_BRIDGE_PROGRAM_ADDRESS,
 >(
-  input: UnpauseInput<TAccountAdmin, TAccountGlobalState>,
+  input: AcceptAdminInput<TAccountPendingAdmin, TAccountGlobalState>,
   config?: { programAddress?: TProgramAddress },
-): UnpauseInstruction<TProgramAddress, TAccountAdmin, TAccountGlobalState> {
+): AcceptAdminInstruction<
+  TProgramAddress,
+  TAccountPendingAdmin,
+  TAccountGlobalState
+> {
   // Program address.
   const programAddress = config?.programAddress ?? QS_BRIDGE_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
-    admin: { value: input.admin ?? null, isWritable: true },
+    pendingAdmin: { value: input.pendingAdmin ?? null, isWritable: true },
     globalState: { value: input.globalState ?? null, isWritable: true },
   };
   const accounts = originalAccounts as Record<
@@ -115,36 +119,40 @@ export function getUnpauseInstruction<
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
-      getAccountMeta(accounts.admin),
+      getAccountMeta(accounts.pendingAdmin),
       getAccountMeta(accounts.globalState),
     ],
-    data: getUnpauseInstructionDataEncoder().encode({}),
+    data: getAcceptAdminInstructionDataEncoder().encode({}),
     programAddress,
-  } as UnpauseInstruction<TProgramAddress, TAccountAdmin, TAccountGlobalState>);
+  } as AcceptAdminInstruction<
+    TProgramAddress,
+    TAccountPendingAdmin,
+    TAccountGlobalState
+  >);
 }
 
-export type ParsedUnpauseInstruction<
+export type ParsedAcceptAdminInstruction<
   TProgram extends string = typeof QS_BRIDGE_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** Admin */
-    admin: TAccountMetas[0];
+    /** Pending admin accepting the transfer */
+    pendingAdmin: TAccountMetas[0];
     /** Global State */
     globalState: TAccountMetas[1];
   };
-  data: UnpauseInstructionData;
+  data: AcceptAdminInstructionData;
 };
 
-export function parseUnpauseInstruction<
+export function parseAcceptAdminInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedUnpauseInstruction<TProgram, TAccountMetas> {
+): ParsedAcceptAdminInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 2) {
     // TODO: Coded error.
     throw new Error("Not enough accounts");
@@ -157,7 +165,7 @@ export function parseUnpauseInstruction<
   };
   return {
     programAddress: instruction.programAddress,
-    accounts: { admin: getNextAccount(), globalState: getNextAccount() },
-    data: getUnpauseInstructionDataDecoder().decode(instruction.data),
+    accounts: { pendingAdmin: getNextAccount(), globalState: getNextAccount() },
+    data: getAcceptAdminInstructionDataDecoder().decode(instruction.data),
   };
 }

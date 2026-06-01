@@ -17,6 +17,8 @@ import {
   getAddressEncoder,
   getBooleanDecoder,
   getBooleanEncoder,
+  getOptionDecoder,
+  getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
   getU16Decoder,
@@ -27,20 +29,23 @@ import {
   getU8Encoder,
   type Account,
   type Address,
+  type Codec,
+  type Decoder,
   type EncodedAccount,
+  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
+  type Option,
+  type OptionOrNullable,
 } from "@solana/kit";
 import { getKeyDecoder, getKeyEncoder, type Key, type KeyArgs } from "../types/index.js";
 
 export type GlobalState = {
   key: Key;
   admin: Address;
+  pendingAdmin: Option<Address>;
   protocolFeeRecipient: Address;
   tokenMint: Address;
   owedProtocolFee: bigint;
@@ -54,6 +59,7 @@ export type GlobalState = {
 export type GlobalStateArgs = {
   key: KeyArgs;
   admin: Address;
+  pendingAdmin: OptionOrNullable<Address>;
   protocolFeeRecipient: Address;
   tokenMint: Address;
   owedProtocolFee: number | bigint;
@@ -65,10 +71,11 @@ export type GlobalStateArgs = {
 };
 
 /** Gets the encoder for {@link GlobalStateArgs} account data. */
-export function getGlobalStateEncoder(): FixedSizeEncoder<GlobalStateArgs> {
+export function getGlobalStateEncoder(): Encoder<GlobalStateArgs> {
   return getStructEncoder([
     ["key", getKeyEncoder()],
     ["admin", getAddressEncoder()],
+    ["pendingAdmin", getOptionEncoder(getAddressEncoder())],
     ["protocolFeeRecipient", getAddressEncoder()],
     ["tokenMint", getAddressEncoder()],
     ["owedProtocolFee", getU64Encoder()],
@@ -81,10 +88,11 @@ export function getGlobalStateEncoder(): FixedSizeEncoder<GlobalStateArgs> {
 }
 
 /** Gets the decoder for {@link GlobalState} account data. */
-export function getGlobalStateDecoder(): FixedSizeDecoder<GlobalState> {
+export function getGlobalStateDecoder(): Decoder<GlobalState> {
   return getStructDecoder([
     ["key", getKeyDecoder()],
     ["admin", getAddressDecoder()],
+    ["pendingAdmin", getOptionDecoder(getAddressDecoder())],
     ["protocolFeeRecipient", getAddressDecoder()],
     ["tokenMint", getAddressDecoder()],
     ["owedProtocolFee", getU64Decoder()],
@@ -97,10 +105,7 @@ export function getGlobalStateDecoder(): FixedSizeDecoder<GlobalState> {
 }
 
 /** Gets the codec for {@link GlobalState} account data. */
-export function getGlobalStateCodec(): FixedSizeCodec<
-  GlobalStateArgs,
-  GlobalState
-> {
+export function getGlobalStateCodec(): Codec<GlobalStateArgs, GlobalState> {
   return combineCodec(getGlobalStateEncoder(), getGlobalStateDecoder());
 }
 
@@ -155,8 +160,4 @@ export async function fetchAllMaybeGlobalState(
 ): Promise<MaybeAccount<GlobalState>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
   return maybeAccounts.map((maybeAccount) => decodeGlobalState(maybeAccount));
-}
-
-export function getGlobalStateSize(): number {
-  return 112;
 }
