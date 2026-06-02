@@ -24,8 +24,8 @@ test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => 
     .list()
     .map((entry) => ({
       ...entry,
-      relayerFeeSolana: entry.relayerFeeSolana.toString(),
-      relayerFeeQubic: entry.relayerFeeQubic.toString(),
+      relayerFeeToSolana: entry.relayerFeeToSolana.toString(),
+      relayerFeeToQubic: entry.relayerFeeToQubic.toString(),
     }));
 
   const res = await app.inject({

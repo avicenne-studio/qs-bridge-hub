@@ -92,8 +92,8 @@ function createHealthServer(opts: {
       JSON.stringify({
         status: "ok",
         timestamp: now?.(),
-        relayerFeeSolana: "1000",
-        relayerFeeQubic: "500",
+        relayerFeeToSolana: "1000",
+        relayerFeeToQubic: "500",
       })
     );
   });
@@ -132,8 +132,8 @@ function createOrdersServer(opts: {
       res.end(
         JSON.stringify({
           status: "ok",
-          relayerFeeSolana: "1000",
-          relayerFeeQubic: "500",
+          relayerFeeToSolana: "1000",
+          relayerFeeToQubic: "500",
         })
       );
       return;
@@ -190,8 +190,8 @@ function markOraclesHealthy(app: FastifyInstance, urls: string[]) {
     oracleService.update(url, {
       status: "ok",
       timestamp,
-      relayerFeeSolana: 1000n,
-      relayerFeeQubic: 500n,
+      relayerFeeToSolana: 1000n,
+      relayerFeeToQubic: 500n,
     });
   }
 }
@@ -271,8 +271,8 @@ describe("oracle service", () => {
         .update(first.url, {
           status: "ok",
           timestamp,
-          relayerFeeSolana: 1000n,
-          relayerFeeQubic: 500n,
+          relayerFeeToSolana: 1000n,
+          relayerFeeToQubic: 500n,
         });
 
       const updated = getOracleEntry(app, first.url);
@@ -355,11 +355,11 @@ describe("oracle service", () => {
         "down"
       );
       t.assert.strictEqual(
-        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeSolana,
+        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeToSolana,
         1000n
       );
       t.assert.strictEqual(
-        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeQubic,
+        snapshot.find((e) => e.url === healthyUrl)?.relayerFeeToQubic,
         500n
       );
 
@@ -1444,8 +1444,8 @@ describe("oracle service", () => {
         res.end(
           JSON.stringify({
             status: "ok",
-            relayerFeeSolana: "bad",
-            relayerFeeQubic: "500",
+            relayerFeeToSolana: "bad",
+            relayerFeeToQubic: "500",
           })
         );
       });
@@ -1462,8 +1462,8 @@ describe("oracle service", () => {
       });
 
       const entry = getOracleEntry(app, "http://127.0.0.1:6101");
-      t.assert.strictEqual(entry?.relayerFeeSolana, 0n);
-      t.assert.strictEqual(entry?.relayerFeeQubic, 500n);
+      t.assert.strictEqual(entry?.relayerFeeToSolana, 0n);
+      t.assert.strictEqual(entry?.relayerFeeToQubic, 500n);
     });
   });
 });
