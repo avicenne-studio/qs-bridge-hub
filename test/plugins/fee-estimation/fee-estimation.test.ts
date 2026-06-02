@@ -6,8 +6,18 @@ import type {
   OracleService,
 } from "../../../src/plugins/app/oracle-service.js";
 
-function makeSolanaCosts(networkFee: number = 2_190_440) {
-  return { estimateUserNetworkFee: async () => BigInt(networkFee) };
+function makeSolanaCosts(
+  networkFee: number = 2_190_440,
+  bpsFee: number = 100,
+  protocolFeeBpsOfBps: number = 1000,
+) {
+  return {
+    estimateUserNetworkFee: async () => BigInt(networkFee),
+    fetchBridgeFeeParams: async () => ({
+      bpsFee: BigInt(bpsFee),
+      protocolFeeBpsOfBps: BigInt(protocolFeeBpsOfBps),
+    }),
+  };
 }
 
 function makeQubicCosts(networkFee: number = 1000) {
