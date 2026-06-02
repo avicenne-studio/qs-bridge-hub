@@ -449,7 +449,7 @@ export function computeRequiredSignatures(
   oracleCount: number,
 ) {
   const threshold = Math.max(0, signatureThreshold);
-  const total = Math.max(1, Math.floor(oracleCount));
+  const total = Math.max(1, oracleCount);
   if (threshold > 0 && threshold <= 1) {
     return Math.max(1, Math.ceil(total * threshold));
   }
