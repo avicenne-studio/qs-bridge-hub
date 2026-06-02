@@ -10,11 +10,6 @@ import {
 } from "../../../src/plugins/app/fee-estimation/solana-costs-estimation.js";
 import { createTrackedServer } from "../../helpers/http-server.js";
 import { UndiciClient } from "../../../src/plugins/infra/undici-client.js";
-import {
-  getGlobalStateEncoder,
-} from "../../../src/clients/js/accounts/globalState.js";
-import { Key } from "../../../src/clients/js/types/key.js";
-
 type MethodHandler = (params: unknown[], id: unknown) => string;
 
 function rpcOk(id: unknown, result: unknown) {
@@ -22,7 +17,6 @@ function rpcOk(id: unknown, result: unknown) {
 }
 
 const TEST_ACCOUNT_KEYS = ["key1", "key2"];
-const TEST_GLOBAL_STATE_PDA = "9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ";
 
 async function createRpcServer(
   t: TestContext,
@@ -53,28 +47,9 @@ async function createRpcServer(
 function buildService(
   rpcUrl: string,
   accountKeys: string[] = TEST_ACCOUNT_KEYS,
-  globalStatePda: string = TEST_GLOBAL_STATE_PDA,
 ) {
   const httpClient = new UndiciClient();
-  return createSolanaCostsEstimation(httpClient, rpcUrl, accountKeys, globalStatePda);
-}
-
-function encodeGlobalState(bpsFee: number, protocolFeeBpsOfBps: number): string {
-  const ZERO_ADDRESS = "11111111111111111111111111111111" as const;
-  const bytes = getGlobalStateEncoder().encode({
-    key: Key.GlobalState,
-    admin: ZERO_ADDRESS,
-    pendingAdmin: null,
-    protocolFeeRecipient: ZERO_ADDRESS,
-    tokenMint: ZERO_ADDRESS,
-    owedProtocolFee: 0n,
-    bpsFee,
-    protocolFeeBpsOfBps,
-    paused: false,
-    oracleCount: 0,
-    bump: 0,
-  });
-  return Buffer.from(bytes).toString("base64");
+  return createSolanaCostsEstimation(httpClient, rpcUrl, accountKeys);
 }
 
 describe("solana-costs-estimation", () => {
@@ -131,40 +106,4 @@ describe("solana-costs-estimation", () => {
     t.assert.strictEqual(fee, expected);
   });
 
-  it("fetches bridge fee params from Solana GlobalState", async (t: TestContext) => {
-    const origin = await createRpcServer(t, {
-      getAccountInfo: (_params, id) => {
-        return rpcOk(id, {
-          context: { slot: 1 },
-          value: {
-            data: [encodeGlobalState(250, 500), "base64"],
-            executable: false,
-            lamports: 2039280,
-            owner: "9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ",
-            rentEpoch: 0,
-          },
-        });
-      },
-    });
-
-    const service = buildService(origin);
-    const params = await service.fetchBridgeFeeParams();
-
-    t.assert.strictEqual(params.bpsFee, 250n);
-    t.assert.strictEqual(params.protocolFeeBpsOfBps, 500n);
-  });
-
-  it("throws when GlobalState account is missing", async (t: TestContext) => {
-    const origin = await createRpcServer(t, {
-      getAccountInfo: (_params, id) => {
-        return rpcOk(id, { context: { slot: 1 }, value: null });
-      },
-    });
-
-    const service = buildService(origin);
-    await t.assert.rejects(
-      service.fetchBridgeFeeParams(),
-      /GlobalState account not found/,
-    );
-  });
 });

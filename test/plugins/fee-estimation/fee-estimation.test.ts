@@ -6,14 +6,16 @@ import type {
   OracleService,
 } from "../../../src/plugins/app/oracle-service.js";
 
-function makeSolanaCosts(
-  networkFee: number = 2_190_440,
-  bpsFee: number = 100,
-  protocolFeeBpsOfBps: number = 1000,
-) {
+function makeSolanaCosts(networkFee: number = 2_190_440) {
   return {
     estimateUserNetworkFee: async () => BigInt(networkFee),
-    fetchBridgeFeeParams: async () => ({
+  };
+}
+
+function makeBridgeState(bpsFee = 100, protocolFeeBpsOfBps = 1000) {
+  return {
+    getPauseState: async () => ({ solana: false, qubic: false }),
+    getSolanaFeeParams: async () => ({
       bpsFee: BigInt(bpsFee),
       protocolFeeBpsOfBps: BigInt(protocolFeeBpsOfBps),
     }),
@@ -73,6 +75,7 @@ describe("fee-estimation", () => {
       makeSolanaCosts(2_190_440),
       makeQubicCosts(),
       oracles,
+      makeBridgeState(),
     );
 
     const result = await service.estimate(OUTBOUND_INPUT);
@@ -96,6 +99,7 @@ describe("fee-estimation", () => {
       makeSolanaCosts(),
       makeQubicCosts(1000),
       oracles,
+      makeBridgeState(),
     );
 
     const result = await service.estimate(INBOUND_INPUT);
@@ -117,6 +121,7 @@ describe("fee-estimation", () => {
       makeSolanaCosts(2_190_440),
       makeQubicCosts(),
       oracles,
+      makeBridgeState(),
     );
 
     const result = await service.estimate(OUTBOUND_INPUT);
@@ -134,6 +139,7 @@ describe("fee-estimation", () => {
       makeSolanaCosts(),
       makeQubicCosts(),
       oracles,
+      makeBridgeState(),
     );
 
     let err: unknown;
@@ -161,6 +167,7 @@ describe("fee-estimation", () => {
       makeSolanaCosts(),
       makeQubicCosts(),
       oracles,
+      makeBridgeState(),
     );
 
     await t.assert.rejects(

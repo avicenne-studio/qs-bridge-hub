@@ -19,6 +19,10 @@ import {
   kOracleService,
   type OracleService,
 } from "../oracle-service.js";
+import {
+  kBridgeState,
+  type BridgeState,
+} from "../bridge-state.js";
 
 export const kFeeEstimation = Symbol("fee-estimation");
 
@@ -32,6 +36,7 @@ export function createFeeEstimationService(
   solanaCosts: SolanaCostsEstimation,
   qubicCosts: ChainCostsEstimation,
   oracleService: OracleService,
+  bridgeState: BridgeState,
 ): FeeEstimation {
   function computeBridgeFee(
     amount: bigint,
@@ -82,7 +87,7 @@ export function createFeeEstimationService(
       }
 
       const { bpsFee, protocolFeeBpsOfBps } =
-        await solanaCosts.fetchBridgeFeeParams();
+        await bridgeState.getSolanaFeeParams();
       const bridgeFee = computeBridgeFee(
         BigInt(input.amount),
         bpsFee,
@@ -116,10 +121,11 @@ export default fp(
       fastify.getDecorator<QubicCostsEstimation>(kQubicCostsEstimation);
     const oracleService =
       fastify.getDecorator<OracleService>(kOracleService);
+    const bridgeState = fastify.getDecorator<BridgeState>(kBridgeState);
 
     fastify.decorate(
       kFeeEstimation,
-      createFeeEstimationService(solanaCosts, qubicCosts, oracleService),
+      createFeeEstimationService(solanaCosts, qubicCosts, oracleService, bridgeState),
     );
   },
   {
@@ -128,6 +134,7 @@ export default fp(
       "solana-costs-estimation",
       "qubic-costs-estimation",
       "oracle-service",
+      "bridge-state",
     ],
   },
 );

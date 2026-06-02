@@ -6,6 +6,10 @@ import {
   kOracleService,
   OracleService,
 } from "../../../plugins/app/oracle-service.js";
+import {
+  kBridgeState,
+  type BridgeState,
+} from "../../../plugins/app/bridge-state.js";
 
 const BridgeHealthResponseSchema = Type.Object({
   paused: Type.Boolean(),
@@ -25,6 +29,7 @@ const OraclesHealthResponseSchema = Type.Object({
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   const oracleService = fastify.getDecorator<OracleService>(kOracleService);
+  const bridgeState = fastify.getDecorator<BridgeState>(kBridgeState);
 
   fastify.get(
     "/bridge",
@@ -39,7 +44,8 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async function handler() {
-      return { paused: false };
+      const { solana, qubic } = await bridgeState.getPauseState();
+      return { paused: solana || qubic };
     }
   );
 

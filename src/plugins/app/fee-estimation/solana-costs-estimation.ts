@@ -12,8 +12,6 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
 } from "@solana-program/token";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
-import { findGlobalStatePda } from "../../../clients/js/pdas/globalState.js";
-import { getGlobalStateDecoder } from "../../../clients/js/accounts/globalState.js";
 
 export const BASE_FEE_LAMPORTS = 5_000;
 export const OUTBOUND_ORDER_RENT_LAMPORTS = 2_185_440;
@@ -22,26 +20,18 @@ export const DEFAULT_PRIORITY_FEE_LAMPORTS = 50_000n;
 
 export const kSolanaCostsEstimation = Symbol("solana-costs-estimation");
 
-export type BridgeFeeParams = { bpsFee: bigint; protocolFeeBpsOfBps: bigint };
-
 export type SolanaCostsEstimation = {
   estimateUserNetworkFee(): Promise<bigint>;
-  fetchBridgeFeeParams(): Promise<BridgeFeeParams>;
 };
 
 interface RpcPriorityFeeResponse {
   result: { priorityFeeEstimate: number };
 }
 
-interface GetAccountInfoResponse {
-  result: { value: { data: [string, string] } | null };
-}
-
 export function createSolanaCostsEstimation(
   httpClient: UndiciClient,
   rpcUrl: string,
   accountKeys: string[],
-  globalStatePda: string,
 ): SolanaCostsEstimation {
   const url = new URL(rpcUrl);
   const origin = url.origin;
@@ -83,25 +73,6 @@ export function createSolanaCostsEstimation(
         BigInt(OUTBOUND_ORDER_RENT_LAMPORTS)
       );
     },
-
-    async fetchBridgeFeeParams() {
-      const response = await rpc<GetAccountInfoResponse>("getAccountInfo", [
-        globalStatePda,
-        { encoding: "base64" },
-      ]);
-      if (!response.result.value) {
-        throw new Error("Solana GlobalState account not found");
-      }
-      const bytes = new Uint8Array(
-        Buffer.from(response.result.value.data[0], "base64"),
-      );
-      const { bpsFee, protocolFeeBpsOfBps } =
-        getGlobalStateDecoder().decode(bytes);
-      return {
-        bpsFee: BigInt(bpsFee),
-        protocolFeeBpsOfBps: BigInt(protocolFeeBpsOfBps),
-      };
-    },
   };
 }
 
@@ -119,15 +90,12 @@ export default fp(
       SYSTEM_PROGRAM_ADDRESS,
     ];
 
-    const [globalStatePda] = await findGlobalStatePda();
-
     fastify.decorate(
       kSolanaCostsEstimation,
       createSolanaCostsEstimation(
         undiciService.create(),
         config.HELIUS_RPC_URL,
         accountKeys,
-        globalStatePda,
       ),
     );
   },

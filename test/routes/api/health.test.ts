@@ -4,18 +4,46 @@ import {
   kOracleService,
   type OracleService,
 } from "../../../src/plugins/app/oracle-service.js";
+import {
+  kBridgeState,
+  type BridgePauseState,
+} from "../../../src/plugins/app/bridge-state.js";
 
-test("GET /api/health/bridge reports paused status", async (t: TestContext) => {
-  const app = await build(t);
+function makeBridgeState(state: BridgePauseState) {
+  return { getPauseState: async () => state };
+}
 
-  const res = await app.inject({
-    url: "/api/health/bridge",
-    method: "GET",
+test("GET /api/health/bridge returns paused=false when both chains are active", async (t: TestContext) => {
+  const app = await build(t, {
+    decorators: { [kBridgeState]: makeBridgeState({ solana: false, qubic: false }) },
   });
 
+  const res = await app.inject({ url: "/api/health/bridge", method: "GET" });
+
   t.assert.strictEqual(res.statusCode, 200);
-  const body = JSON.parse(res.payload);
-  t.assert.deepStrictEqual(body, { paused: false });
+  t.assert.deepStrictEqual(JSON.parse(res.payload), { paused: false });
+});
+
+test("GET /api/health/bridge returns paused=true when solana is paused", async (t: TestContext) => {
+  const app = await build(t, {
+    decorators: { [kBridgeState]: makeBridgeState({ solana: true, qubic: false }) },
+  });
+
+  const res = await app.inject({ url: "/api/health/bridge", method: "GET" });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  t.assert.deepStrictEqual(JSON.parse(res.payload), { paused: true });
+});
+
+test("GET /api/health/bridge returns paused=true when qubic is paused", async (t: TestContext) => {
+  const app = await build(t, {
+    decorators: { [kBridgeState]: makeBridgeState({ solana: false, qubic: true }) },
+  });
+
+  const res = await app.inject({ url: "/api/health/bridge", method: "GET" });
+
+  t.assert.strictEqual(res.statusCode, 200);
+  t.assert.deepStrictEqual(JSON.parse(res.payload), { paused: true });
 });
 
 test("GET /api/health/oracles lists oracle statuses", async (t: TestContext) => {
