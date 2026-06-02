@@ -30,7 +30,7 @@ import {
 } from "../instructions/index.js";
 
 export const QS_BRIDGE_PROGRAM_ADDRESS =
-  "qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H" as Address<"qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H">;
+  "9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ" as Address<"9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ">;
 
 export enum QsBridgeAccount {
   GlobalState,
@@ -109,7 +109,7 @@ export function identifyQsBridgeInstruction(
 }
 
 export type ParsedQsBridgeInstruction<
-  TProgram extends string = "qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H",
+  TProgram extends string = "9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ",
 > =
   | ({
       instructionType: QsBridgeInstruction.InitGlobalState;

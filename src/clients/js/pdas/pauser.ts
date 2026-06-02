@@ -23,7 +23,7 @@ export async function findPauserPda(
   config: { programAddress?: Address | undefined } = {},
 ): Promise<ProgramDerivedAddress> {
   const {
-    programAddress = "qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H" as Address<"qSBGtee9tspoDVmb867Wq6tcR3kp19XN1PbBVckrH7H">,
+    programAddress = "9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ" as Address<"9HzXq7P6UEQjJCrvbPCt4eZRvkoJU9jo1mSssbMHkncQ">,
   } = config;
   return await getProgramDerivedAddress({
     programAddress,
