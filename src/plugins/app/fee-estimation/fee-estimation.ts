@@ -20,9 +20,6 @@ import {
   type OracleService,
 } from "../oracle-service.js";
 
-const BPS_FEE = 100n;
-const PROTOCOL_FEE_BPS_OF_BPS = 1000n;
-
 export const kFeeEstimation = Symbol("fee-estimation");
 
 const MIN_HEALTHY_ORACLES = 4;
@@ -36,9 +33,13 @@ export function createFeeEstimationService(
   qubicCosts: ChainCostsEstimation,
   oracleService: OracleService,
 ): FeeEstimation {
-  function computeBridgeFee(amount: bigint) {
-    const oracle = (amount * BPS_FEE) / 10_000n;
-    const protocol = (oracle * PROTOCOL_FEE_BPS_OF_BPS) / 10_000n;
+  function computeBridgeFee(
+    amount: bigint,
+    bpsFee: bigint,
+    protocolFeeBpsOfBps: bigint,
+  ) {
+    const oracle = (amount * bpsFee) / 10_000n;
+    const protocol = (oracle * protocolFeeBpsOfBps) / 10_000n;
     return { oracle, protocol, total: oracle + protocol };
   }
 
@@ -80,7 +81,13 @@ export function createFeeEstimationService(
         );
       }
 
-      const bridgeFee = computeBridgeFee(BigInt(input.amount));
+      const { bpsFee, protocolFeeBpsOfBps } =
+        await solanaCosts.fetchBridgeFeeParams();
+      const bridgeFee = computeBridgeFee(
+        BigInt(input.amount),
+        bpsFee,
+        protocolFeeBpsOfBps,
+      );
       const relayerFee = getRelayerFee(destChain);
       const networkFee = await getNetworkFee(sourceChain, input);
       const userReceives = BigInt(input.amount) - bridgeFee.total - relayerFee;
