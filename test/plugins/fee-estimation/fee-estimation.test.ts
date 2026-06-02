@@ -10,7 +10,7 @@ function makeSolanaCosts(networkFee: number = 2_190_440) {
   return { estimateUserNetworkFee: async () => BigInt(networkFee) };
 }
 
-function makeQubicCosts(networkFee: number = 1) {
+function makeQubicCosts(networkFee: number = 1000) {
   return { estimateUserNetworkFee: async () => BigInt(networkFee) };
 }
 
@@ -37,16 +37,16 @@ const INBOUND_INPUT: EstimationInput = {
 function healthyOracle(
   url: string,
   opts: {
-    relayerFeeSolana?: bigint;
-    relayerFeeQubic?: bigint;
+    relayerFeeToSolana?: bigint;
+    relayerFeeToQubic?: bigint;
   } = {},
 ): OracleHealthEntry {
   return {
     url,
     status: "ok",
     timestamp: new Date().toISOString(),
-    relayerFeeSolana: 20n,
-    relayerFeeQubic: 1n,
+    relayerFeeToSolana: 20n,
+    relayerFeeToQubic: 1n,
     ...opts,
   };
 }
@@ -54,10 +54,10 @@ function healthyOracle(
 describe("fee-estimation", () => {
   it("computes outbound fees (Solana -> Qubic) using median relayer fee", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracle("http://a", { relayerFeeQubic: 5n }),
-      healthyOracle("http://b", { relayerFeeQubic: 7n }),
-      healthyOracle("http://c", { relayerFeeQubic: 3n }),
-      healthyOracle("http://d", { relayerFeeQubic: 5n }),
+      healthyOracle("http://a", { relayerFeeToQubic: 5n }),
+      healthyOracle("http://b", { relayerFeeToQubic: 7n }),
+      healthyOracle("http://c", { relayerFeeToQubic: 3n }),
+      healthyOracle("http://d", { relayerFeeToQubic: 5n }),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(2_190_440),
@@ -77,14 +77,14 @@ describe("fee-estimation", () => {
 
   it("computes inbound fees (Qubic -> Solana) using median relayer fee", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracle("http://a", { relayerFeeSolana: 15n }),
-      healthyOracle("http://b", { relayerFeeSolana: 15n }),
-      healthyOracle("http://c", { relayerFeeSolana: 15n }),
+      healthyOracle("http://a", { relayerFeeToSolana: 15n }),
+      healthyOracle("http://b", { relayerFeeToSolana: 15n }),
+      healthyOracle("http://c", { relayerFeeToSolana: 15n }),
       healthyOracle("http://d"),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(),
-      makeQubicCosts(1),
+      makeQubicCosts(1000),
       oracles,
     );
 
@@ -92,16 +92,16 @@ describe("fee-estimation", () => {
 
     t.assert.strictEqual(result.bridgeFee.total, "11000");
     t.assert.strictEqual(result.relayerFee, "15");
-    t.assert.strictEqual(result.networkFee, "1");
+    t.assert.strictEqual(result.networkFee, "1000");
     t.assert.strictEqual(result.userReceives, "988985");
   });
 
   it("computes median with 4 oracles (even count)", async (t: TestContext) => {
     const oracles = makeOracleService([
-      healthyOracle("http://a", { relayerFeeQubic: 2n }),
-      healthyOracle("http://b", { relayerFeeQubic: 4n }),
-      healthyOracle("http://c", { relayerFeeQubic: 6n }),
-      healthyOracle("http://d", { relayerFeeQubic: 8n }),
+      healthyOracle("http://a", { relayerFeeToQubic: 2n }),
+      healthyOracle("http://b", { relayerFeeToQubic: 4n }),
+      healthyOracle("http://c", { relayerFeeToQubic: 6n }),
+      healthyOracle("http://d", { relayerFeeToQubic: 8n }),
     ]);
     const service = createFeeEstimationService(
       makeSolanaCosts(2_190_440),

@@ -31,6 +31,8 @@ export type AppConfig = {
   SOLANA_WS_RECONNECT_MAX_MS: number;
   SOLANA_WS_FALLBACK_RETRY_MS: number;
   TOKEN_MINT: string;
+  /** QU paid by the user to invoke the Qubic lock contract (network fee for Qubic→Solana direction). */
+  QUBIC_INVOCATION_REWARD: number;
 };
 
 export const kConfig = 'config'
@@ -55,6 +57,7 @@ const schema = {
     'HELIUS_POLLER_TIMEOUT_MS',
     'HELIUS_POLLER_RETRY_DELAY_MS',
     'TOKEN_MINT',
+    'QUBIC_INVOCATION_REWARD',
     'QUBIC_BOB_URL',
     'QUBIC_POLLER_ENABLED',
     'QUBIC_POLLER_INTERVAL_MS',
@@ -187,6 +190,10 @@ const schema = {
     },
     TOKEN_MINT: {
       type: 'string',
+    },
+    QUBIC_INVOCATION_REWARD: {
+      type: 'number',
+      minimum: 1,
     }
   }
 }

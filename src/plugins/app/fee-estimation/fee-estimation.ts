@@ -54,7 +54,7 @@ export function createFeeEstimationService(
       throw err;
     }
     const fees = healthy.map((o) =>
-      chain === Network.Solana ? o.relayerFeeSolana : o.relayerFeeQubic,
+      chain === Network.Solana ? o.relayerFeeToSolana : o.relayerFeeToQubic,
     );
     return median(fees);
   }
