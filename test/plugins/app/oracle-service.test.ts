@@ -692,10 +692,21 @@ describe("oracle service", () => {
       t.assert.strictEqual(updated?.failure_reason_public, "fee-too-low");
     });
 
-    test("computes required signature thresholds", (t: TestContext) => {
-      t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);
+    test("computes required signature thresholds — ratio mode", (t: TestContext) => {
+      t.assert.strictEqual(computeRequiredSignatures(0.6, 3), 2);   // ceil(3 * 0.6) = ceil(1.8) = 2
+      t.assert.strictEqual(computeRequiredSignatures(0.6, 5), 3);   // ceil(5 * 0.6) = ceil(3.0) = 3
+      t.assert.strictEqual(computeRequiredSignatures(1, 5), 5);     // ratio=1 means all oracles
+    });
+
+    test("computes required signature thresholds — integer mode", (t: TestContext) => {
       t.assert.strictEqual(computeRequiredSignatures(3, 6), 3);
-      t.assert.strictEqual(computeRequiredSignatures(-1, 0), 1);
+      t.assert.strictEqual(computeRequiredSignatures(2, 10), 2);
+    });
+
+    test("computes required signature thresholds — edge cases", (t: TestContext) => {
+      t.assert.strictEqual(computeRequiredSignatures(0, 5), 1);     // zero → min 1
+      t.assert.strictEqual(computeRequiredSignatures(-1, 0), 1);    // negative → min 1
+      t.assert.strictEqual(computeRequiredSignatures(1.5, 5), 1);   // integer mode, floor(1.5) = 1
     });
 
     test("keeps orders pending when signature threshold is not met", async (t: TestContext) => {

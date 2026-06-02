@@ -105,7 +105,7 @@ const schema = {
       default: 0.6
     },
     ORACLE_COUNT: {
-      type: 'number',
+      type: 'integer',
       minimum: 1,
       default: 6
     },
