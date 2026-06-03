@@ -128,7 +128,7 @@ describe("qubic poller plugin", () => {
     t.assert.strictEqual(eventsRepo.store[0].signature, Buffer.from(order.orderHash).toString("hex"));
     t.assert.strictEqual(eventsRepo.store[0].chain, "qubic");
     t.assert.strictEqual(eventsRepo.store[0].type, "lock");
-    t.assert.strictEqual(eventsRepo.store[0].nonce, "1");
+    t.assert.strictEqual(eventsRepo.store[0].nonce, "00000001");
   });
 
   it("synchronizes to current smart contract state on startup without replaying historical locks", async (t: TestContext) => {
@@ -146,10 +146,10 @@ describe("qubic poller plugin", () => {
       config: { QUBIC_POLLER_SYNC_TO_HEAD_ON_START: true },
     });
 
-    await waitFor(() => eventsRepo.store.some((e) => e.nonce === "31"));
+    await waitFor(() => eventsRepo.store.some((e) => e.nonce === "0000001f"));
 
-    t.assert.strictEqual(eventsRepo.store.some((e) => e.nonce === "30"), false);
-    t.assert.strictEqual(eventsRepo.store.some((e) => e.nonce === "31"), true);
+    t.assert.strictEqual(eventsRepo.store.some((e) => e.nonce === "0000001e"), false);
+    t.assert.strictEqual(eventsRepo.store.some((e) => e.nonce === "0000001f"), true);
   });
 
   it("detects override-lock when the same sender nonce is replaced by a new order hash", async (t: TestContext) => {
@@ -182,7 +182,7 @@ describe("qubic poller plugin", () => {
     );
 
     const overrideEvent = eventsRepo.store.find((e) => e.type === "override-lock")!;
-    t.assert.strictEqual(overrideEvent.nonce, "2");
+    t.assert.strictEqual(overrideEvent.nonce, "00000002");
   });
 
   it("stores unlock event from filled order hashes", async (t: TestContext) => {
@@ -320,8 +320,8 @@ describe("qubic poller plugin", () => {
 
     await waitFor(() => eventsRepo.store.length >= 1);
 
-    t.assert.ok(eventsRepo.store.every((e) => e.nonce !== "77"), "inactive order must not produce events");
-    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "78"), "active order must produce an event");
+    t.assert.ok(eventsRepo.store.every((e) => e.nonce !== "0000004d"), "inactive order must not produce events");
+    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "0000004e"), "active order must produce an event");
   });
 
   it("uses default fetcher when no custom fetcher is decorated", async (t: TestContext) => {
@@ -338,7 +338,7 @@ describe("qubic poller plugin", () => {
     });
 
     await waitFor(() => eventsRepo.store.length >= 1);
-    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "99"));
+    t.assert.ok(eventsRepo.store.some((e) => e.nonce === "00000063"));
 
     await app.close();
   });

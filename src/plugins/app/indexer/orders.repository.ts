@@ -10,9 +10,8 @@ export const ORDER_SIGNATURES_TABLE_NAME = "order_signatures";
 export interface OrdersRepository {
   paginate(q: OrderQuery): Promise<{ orders: StoredOrder[]; total: number }>;
   findById(id: string): Promise<StoredOrder | null>;
-  findByOriginTrxHash(hash: string): Promise<StoredOrder | null>;
-  findByOriginTrxHashWithSignatures(
-    hash: string
+  findBySourceNonceWithSignatures(
+    nonce: string
   ): Promise<OrderWithSignatures | null>;
   create(newOrder: CreateOrder): Promise<StoredOrder | null>;
   update(id: string, changes: Partial<OracleOrder>): Promise<StoredOrder | null>;
@@ -182,31 +181,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
       return row ? normalizeStoredOrder(row as StoredOrder) : null;
     },
 
-    async findByOriginTrxHash(hash: string) {
-      const row = await knex<StoredOrder>(ORDERS_TABLE_NAME)
-        .select(
-          "id",
-          "source",
-          "dest",
-          "from",
-          "to",
-          "amount",
-          "relayerFee",
-          "origin_trx_hash",
-          "destination_trx_hash",
-          "source_nonce",
-          "source_payload",
-          "order_era",
-          "failure_reason_public",
-          "status",
-          "created_at"
-        )
-        .where("origin_trx_hash", hash)
-        .first();
-      return row ? normalizeStoredOrder(row as StoredOrder) : null;
-    },
-
-    async findByOriginTrxHashWithSignatures(hash: string) {
+    async findBySourceNonceWithSignatures(nonce: string) {
       type OrderWithSignatureRow = StoredOrder & {
         signature_id: number | null;
         signature_order_id: string | null;
@@ -240,7 +215,7 @@ function createRepository(fastify: FastifyInstance): OrdersRepository {
           "signatures.order_id as signature_order_id",
           "signatures.signature as signature_value"
         )
-        .where("orders.origin_trx_hash", hash)
+        .where("orders.source_nonce", nonce)
         .orderBy("orders.id", "asc")) as OrderWithSignatureRow[];
 
       if (rows.length === 0) {
