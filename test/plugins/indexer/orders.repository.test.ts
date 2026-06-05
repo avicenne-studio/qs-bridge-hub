@@ -303,34 +303,11 @@ describe("ordersRepository", () => {
     t.assert.deepStrictEqual(orders[0].signatures, []);
   });
 
-  it("should find by origin trx hash", async (t: TestContext) => {
+  it("should find by source nonce with signatures", async (t: TestContext) => {
     const app = await build(t);
     const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
 
-    await repo.create({
-      id: makeId(781),
-      source: "solana",
-      dest: "qubic",
-      from: "OriginA",
-      to: "OriginB",
-      amount: "9",
-      relayerFee: "1",
-      origin_trx_hash: "trx-hash-basic",
-      status: "pending",
-    });
-
-    const found = await repo.findByOriginTrxHash("trx-hash-basic");
-    t.assert.ok(found);
-    t.assert.strictEqual(found?.origin_trx_hash, "trx-hash-basic");
-
-    const missing = await repo.findByOriginTrxHash("trx-hash-missing");
-    t.assert.strictEqual(missing, null);
-  });
-
-  it("should find by origin trx hash with signatures", async (t: TestContext) => {
-    const app = await build(t);
-    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
-
+    const nonce = "0".repeat(56) + "0000007b";
     const created = await repo.create({
       id: makeId(79),
       source: "solana",
@@ -340,16 +317,44 @@ describe("ordersRepository", () => {
       amount: "9",
       relayerFee: "1",
       origin_trx_hash: "trx-hash-origin",
+      source_nonce: nonce,
       status: "pending",
     });
 
     await repo.addSignatures(created!.id, ["sig-a", "sig-b"]);
 
-    const order = await repo.findByOriginTrxHashWithSignatures("trx-hash-origin");
+    const order = await repo.findBySourceNonceWithSignatures(nonce);
     t.assert.ok(order);
     t.assert.strictEqual(order?.id, created!.id);
     t.assert.strictEqual(order?.signatures.length, 2);
     t.assert.strictEqual(order?.signatures[0].order_id, created!.id);
+
+    const missing = await repo.findBySourceNonceWithSignatures("0".repeat(64));
+    t.assert.strictEqual(missing, null);
+  });
+
+  it("should return empty signatures array when order has no signatures", async (t: TestContext) => {
+    const app = await build(t);
+    const repo = app.getDecorator<OrdersRepository>(kOrdersRepository);
+
+    const nonce = "0".repeat(56) + "0000007c";
+    const created = await repo.create({
+      id: makeId(80),
+      source: "qubic",
+      dest: "solana",
+      from: "FromA",
+      to: "ToB",
+      amount: "5",
+      relayerFee: "1",
+      origin_trx_hash: "trx-hash-no-sigs",
+      source_nonce: nonce,
+      status: "pending",
+    });
+
+    const order = await repo.findBySourceNonceWithSignatures(nonce);
+    t.assert.ok(order);
+    t.assert.strictEqual(order?.id, created!.id);
+    t.assert.strictEqual(order?.signatures.length, 0);
   });
 
   it("should return active ids with limit", async (t: TestContext) => {

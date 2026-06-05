@@ -33,17 +33,18 @@ function lockOrderToQubicEvent(
   type: "lock" | "override-lock",
   order: LockedOrder,
 ): QubicEvent {
+  const nonceHex = order.nonce.toString(16).padStart(8, "0");
   return {
     chain: "qubic",
     type,
-    nonce: order.nonce.toString(),
+    nonce: nonceHex,
     orderHash: Buffer.from(order.orderHash).toString("hex"),
     payload: {
       fromAddress: Buffer.from(order.sender).toString("hex"),
       toAddress: Buffer.from(order.toAddress).toString("ascii").replace(/\0+$/u, ""),
       amount: order.amount.toString(),
       relayerFee: order.relayerFee.toString(),
-      nonce: order.nonce.toString(),
+      nonce: nonceHex,
       orderEra: order.orderEra.toString(),
     },
   };

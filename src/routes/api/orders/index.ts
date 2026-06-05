@@ -136,10 +136,10 @@ const OrdersResponseSchema = Type.Object({
   }),
 });
 
-const OrderByTrxHashParamsSchema = Type.Object({
-  hash: Type.String({
-    description: "Origin transaction hash to lookup.",
-    examples: ["0xabc123"],
+const OrderBySourceNonceParamsSchema = Type.Object({
+  nonce: Type.String({
+    description: "Source nonce (64-char hex) to lookup.",
+    examples: ["000000000000000000000000000000000000000000000000000000001234abcd"],
   }),
 });
 
@@ -148,7 +148,7 @@ const SignatureSchema = Type.String({
   examples: ["0xdeadbeef"],
 });
 
-const OrderByTrxHashResponseSchema = Type.Object({
+const OrderBySourceNonceResponseSchema = Type.Object({
   data: Type.Intersect([
     StoredOrderSchema,
     Type.Object({
@@ -345,22 +345,22 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
   );
 
   fastify.get(
-    "/trx-hash/:hash",
+    "/source-nonce/:nonce",
     {
       schema: {
-        params: OrderByTrxHashParamsSchema,
-        summary: "Fetch order by origin transaction hash",
+        params: OrderBySourceNonceParamsSchema,
+        summary: "Fetch order by source nonce",
         description:
-          "Returns the order that originated from the provided transaction hash.",
+          "Returns the order matching the provided source nonce (64-char hex).",
         tags: ["Orders"],
         response: {
-          200: OrderByTrxHashResponseSchema,
+          200: OrderBySourceNonceResponseSchema,
         },
       },
     },
     async function handler(request) {
-      const { hash } = request.params;
-      const order = await ordersRepository.findByOriginTrxHashWithSignatures(hash);
+      const { nonce } = request.params;
+      const order = await ordersRepository.findBySourceNonceWithSignatures(nonce);
       if (!order) {
         throw fastify.httpErrors.notFound("Order not found");
       }

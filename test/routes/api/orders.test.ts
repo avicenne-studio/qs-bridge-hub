@@ -26,7 +26,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "10",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
-    source_nonce: "nonce",
+    source_nonce: "0".repeat(56) + "00000191",
     source_payload: "{\"v\":1}",
     order_era: 0,
     status: "pending",
@@ -40,7 +40,7 @@ async function seedOrders(app: Awaited<ReturnType<typeof build>>) {
     amount: "25",
     relayerFee: "1",
     origin_trx_hash: "trx-hash",
-    source_nonce: "nonce",
+    source_nonce: "0".repeat(56) + "00000192",
     source_payload: "{\"v\":1}",
     order_era: 0,
     status: "finalized",
@@ -220,34 +220,35 @@ test("GET /api/orders filters by created_after and created_before", async (t: Te
   t.assert.strictEqual(await total({ created_after: dateAfterNew }), 0);
 });
 
-test("GET /api/orders/trx-hash returns order by transaction hash", async (t: TestContext) => {
+test("GET /api/orders/source-nonce returns order by source nonce", async (t: TestContext) => {
   const app = await build(t);
   await seedOrders(app);
   const ordersRepository =
     app.getDecorator<OrdersRepository>(kOrdersRepository);
 
   const orderId = makeId(401);
+  const nonce = "0".repeat(56) + "00000191";
   await ordersRepository.addSignatures(orderId, ["sig-1", "sig-2"]);
 
   const res = await app.inject({
     method: "GET",
-    url: "/api/orders/trx-hash/trx-hash",
+    url: `/api/orders/source-nonce/${nonce}`,
   });
 
   t.assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
-  t.assert.strictEqual(body.data.origin_trx_hash, "trx-hash");
+  t.assert.strictEqual(body.data.source_nonce, nonce);
   t.assert.strictEqual(body.data.id, orderId);
   t.assert.deepStrictEqual(body.data.signatures, ["sig-1", "sig-2"]);
 });
 
-test("GET /api/orders/trx-hash returns 404 when order is missing", async (t: TestContext) => {
+test("GET /api/orders/source-nonce returns 404 when order is missing", async (t: TestContext) => {
   const app = await build(t);
   await seedOrders(app);
 
   const res = await app.inject({
     method: "GET",
-    url: "/api/orders/trx-hash/missing",
+    url: "/api/orders/source-nonce/" + "0".repeat(64),
   });
 
   t.assert.strictEqual(res.statusCode, 404);
