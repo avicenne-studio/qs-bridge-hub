@@ -28,11 +28,14 @@ export const QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES = 0x4; // 4
 export const QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE = 0x5; // 5
 /** InvalidRelayerFee: Invalid relayer fee */
 export const QS_BRIDGE_ERROR__INVALID_RELAYER_FEE = 0x6; // 6
+/** MaxOverridesReached: Override attempt limit reached */
+export const QS_BRIDGE_ERROR__MAX_OVERRIDES_REACHED = 0x7; // 7
 
 export type QsBridgeError =
   | typeof QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE
   | typeof QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES
   | typeof QS_BRIDGE_ERROR__INVALID_RELAYER_FEE
+  | typeof QS_BRIDGE_ERROR__MAX_OVERRIDES_REACHED
   | typeof QS_BRIDGE_ERROR__ORACLE_HAS_CLAIMABLE_BALANCE
   | typeof QS_BRIDGE_ERROR__PROGRAM_PAUSED
   | typeof QS_BRIDGE_ERROR__UNSUPPORTED_NETWORK
@@ -44,6 +47,7 @@ if (process.env.NODE_ENV !== "production") {
     [QS_BRIDGE_ERROR__DUPLICATE_ORACLE_SIGNATURE]: `Duplicate oracle signature detected`,
     [QS_BRIDGE_ERROR__INVALID_NUMBER_OF_SIGNATURES]: `Invalid number of signatures`,
     [QS_BRIDGE_ERROR__INVALID_RELAYER_FEE]: `Invalid relayer fee`,
+    [QS_BRIDGE_ERROR__MAX_OVERRIDES_REACHED]: `Override attempt limit reached`,
     [QS_BRIDGE_ERROR__ORACLE_HAS_CLAIMABLE_BALANCE]: `Oracle has claimable balance`,
     [QS_BRIDGE_ERROR__PROGRAM_PAUSED]: `Program is paused`,
     [QS_BRIDGE_ERROR__UNSUPPORTED_NETWORK]: `Unsupported network`,

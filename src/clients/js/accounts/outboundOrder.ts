@@ -52,6 +52,7 @@ export type OutboundOrder = {
   nonce: ReadonlyUint8Array;
   orderEra: number;
   bump: number;
+  overrideCount: number;
 };
 
 export type OutboundOrderArgs = {
@@ -67,6 +68,7 @@ export type OutboundOrderArgs = {
   nonce: ReadonlyUint8Array;
   orderEra: number;
   bump: number;
+  overrideCount: number;
 };
 
 /** Gets the encoder for {@link OutboundOrderArgs} account data. */
@@ -84,6 +86,7 @@ export function getOutboundOrderEncoder(): FixedSizeEncoder<OutboundOrderArgs> {
     ["nonce", fixEncoderSize(getBytesEncoder(), 32)],
     ["orderEra", getU32Encoder()],
     ["bump", getU8Encoder()],
+    ["overrideCount", getU8Encoder()],
   ]);
 }
 
@@ -102,6 +105,7 @@ export function getOutboundOrderDecoder(): FixedSizeDecoder<OutboundOrder> {
     ["nonce", fixDecoderSize(getBytesDecoder(), 32)],
     ["orderEra", getU32Decoder()],
     ["bump", getU8Decoder()],
+    ["overrideCount", getU8Decoder()],
   ]);
 }
 
@@ -171,5 +175,5 @@ export async function fetchAllMaybeOutboundOrder(
 }
 
 export function getOutboundOrderSize(): number {
-  return 190;
+  return 191;
 }
